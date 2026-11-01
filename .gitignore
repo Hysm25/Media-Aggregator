@@ -13,6 +13,14 @@ build/
 *.magnet
 *.db
 .env
+.env.*
+!.env.example
+*.local
+*.secret
+*.pem
+*.key
+*.token
+credentials.json
 .venv
 env/
 venv/

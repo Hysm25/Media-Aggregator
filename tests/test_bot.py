@@ -172,32 +172,30 @@ async def test_auth_middleware(tmp_path):
     config = BotConfig(bot_token="test", admin_ids=[777])
     middleware = AuthMiddleware(user_service=user_service, config=config)
 
-    # 1. No admins -> setup mode
     handler = AsyncMock(return_value="OK")
     event = MagicMock(spec=Message)
     event.text = "/start"
     event.answer = AsyncMock()
-    data = {"event_from_user": User(id=100, is_bot=False, first_name="FirstUser")}
 
-    res = await middleware(handler, event, data)
-    assert res == "OK"
-    assert data["is_setup_mode"] is True
+    # 1. Untrusted user (id=100) cannot claim admin or access bot in personal mode
+    data_untrusted = {"event_from_user": User(id=100, is_bot=False, first_name="UntrustedUser")}
+    res_untrusted = await middleware(handler, event, data_untrusted)
+    assert res_untrusted is None
+    event.answer.assert_called()
 
-    # 2. Setup first admin
-    await user_service.claim_first_admin(100, "first_user")
-
-    # 3. Static admin in admin_ids
+    # 2. Trusted admin in admin_ids (id=777) is granted access and made admin
     data_admin = {"event_from_user": User(id=777, is_bot=False, first_name="StaticAdmin")}
     res_admin = await middleware(handler, event, data_admin)
     assert res_admin == "OK"
     assert data_admin["user_record"].is_admin is True
 
-    # 4. Unauthorized non-admin user
-    data_unauth = {"event_from_user": User(id=999, is_bot=False, first_name="RandomUser")}
-    res_unauth = await middleware(handler, event, data_unauth)
-    # Blocked, handler not called for unauthorized user
-    assert res_unauth is None
-    event.answer.assert_called()
+    # 3. Multi-user mode allows non-admin users to browse
+    config_multi = BotConfig(bot_token="test", admin_ids=[777], bot_mode="multi-user")
+    mw_multi = AuthMiddleware(user_service=user_service, config=config_multi)
+    data_guest = {"event_from_user": User(id=200, is_bot=False, first_name="GuestUser")}
+    res_guest = await mw_multi(handler, event, data_guest)
+    assert res_guest == "OK"
+    assert data_guest["user_record"].is_admin is False
 
 
 @pytest.mark.asyncio
@@ -235,11 +233,20 @@ async def test_start_and_claim_handlers(tmp_path):
     await handle_start(msg_normal, user_record=user_rec, is_setup_mode=False)
     assert "Welcome" in msg_normal.answer.call_args[0][0]
 
-    # handle_claim_admin
+    # handle_claim_admin with unauthorized user
+    cfg = BotConfig(admin_ids=[1])
+    cb_unauth = AsyncMock()
+    cb_unauth.from_user = User(id=999, is_bot=False, first_name="Hacker")
+    cb_unauth.message = AsyncMock()
+    await handle_claim_admin(cb_unauth, user_record=UserRecord(user_id=999), user_service=user_service, config=cfg)
+    cb_unauth.answer.assert_called_with("🚫 Unauthorized: Your Telegram ID is not in TELEGRAM_ADMIN_IDS.", show_alert=True)
+    assert await user_service.is_admin(999) is False
+
+    # handle_claim_admin with authorized user
     cb = AsyncMock()
     cb.from_user = User(id=1, is_bot=False, first_name="U1")
     cb.message = AsyncMock()
-    await handle_claim_admin(cb, user_record=user_rec, user_service=user_service)
+    await handle_claim_admin(cb, user_record=user_rec, user_service=user_service, config=cfg)
     assert await user_service.is_admin(1) is True
 
 

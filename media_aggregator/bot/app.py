@@ -37,7 +37,7 @@ def create_dispatcher(
 ) -> Dispatcher:
     """Create and configure Dispatcher with dependency injection and middlewares."""
     dp = Dispatcher()
-    storage_mgr = storage or StorageManager()
+    storage_mgr = storage or StorageManager(db_path=config.database_path)
 
     # Instantiate services
     media_service = MediaService(storage=storage_mgr)
@@ -91,11 +91,12 @@ async def run_bot(
 ) -> None:
     """Run Telegram Bot polling with graceful shutdown handling."""
     cfg = config or BotConfig.from_env()
-    if not cfg.bot_token:
-        raise ValueError(
-            "Telegram Bot Token not provided. Set TELEGRAM_BOT_TOKEN environment variable "
-            "or pass --token to 'media-aggregator bot'."
-        )
+    cfg.validate(require_token=True)
+
+    logging.basicConfig(
+        level=getattr(logging, cfg.log_level.upper(), logging.INFO),
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
 
     bot = create_bot(cfg.bot_token)
     dp = create_dispatcher(cfg, storage=storage)

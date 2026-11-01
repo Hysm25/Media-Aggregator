@@ -5,6 +5,7 @@ from __future__ import annotations
 from aiogram import F, Router, types
 from aiogram.filters import Command, CommandStart
 from media_aggregator.bot.callbacks import AdminCallback, NavCallback
+from media_aggregator.bot.config import BotConfig
 from media_aggregator.bot.keyboards import first_time_setup_keyboard, main_menu_keyboard
 from media_aggregator.models import UserRecord
 from media_aggregator.services.user_service import UserService
@@ -41,8 +42,13 @@ async def handle_claim_admin(
     callback: types.CallbackQuery,
     user_record: UserRecord,
     user_service: UserService,
+    config: BotConfig,
 ) -> None:
     """Execute initial administrator claim in setup wizard."""
+    if config.admin_ids and callback.from_user.id not in config.admin_ids:
+        await callback.answer("🚫 Unauthorized: Your Telegram ID is not in TELEGRAM_ADMIN_IDS.", show_alert=True)
+        return
+
     success = await user_service.claim_first_admin(
         user_id=user_record.user_id,
         username=callback.from_user.username,

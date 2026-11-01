@@ -181,14 +181,57 @@ media-aggregator config-torrentio --providers "yts,1337x,rarbg" --sort seeders
 
 ### 9. Launch Telegram Bot
 ```bash
-# Launch bot with explicit token and admin ID
-media-aggregator bot --token "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" --admin 123456789
-
-# Or run using environment variables
-export TELEGRAM_BOT_TOKEN="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-export TELEGRAM_ADMIN_IDS="123456789"
+# Quick start using .env configuration (recommended)
+cp .env.example .env
+# Edit .env with your BOT_TOKEN and TELEGRAM_ADMIN_IDS
 media-aggregator bot
+
+# Or launch bot with explicit CLI flags
+media-aggregator bot --token "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" --admin 123456789 --mode personal
+
+# Use custom .env file
+media-aggregator bot --env-file /path/to/.env.production
 ```
+
+---
+
+## ⚙️ Environment Configuration (`.env`)
+
+The application uses `python-dotenv` to automatically load runtime configuration from a `.env` file located in the project root or specified via `--env-file`.
+
+### Setup
+Copy the template to create your local `.env`:
+```bash
+cp .env.example .env
+```
+
+> [!NOTE]
+> `.env` is ignored by Git to protect tokens and private IDs. Never commit real credentials or secrets to version control.
+
+### Supported Configuration Variables
+
+| Variable | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `BOT_TOKEN` | String | *(Required)* | Telegram Bot Token obtained from [@BotFather](https://t.me/BotFather). Fallback: `TELEGRAM_BOT_TOKEN`. |
+| `TELEGRAM_ADMIN_IDS` | String | `""` | Comma-separated list of trusted Telegram User IDs (e.g., `123456789,987654321`). |
+| `BOT_MODE` | String | `personal` | Bot operating mode: `personal` (restricted to trusted admins and approved users) or `multi-user` (public search and browsing, restricted admin tools). |
+| `DATABASE_PATH` | Path | `~/.media_aggregator/data.db` | Persistent SQLite database file. Supports `~` home directory expansion. Fallback: `MEDIA_AGGREGATOR_DB`. |
+| `RATE_LIMIT_SECONDS` | Float | `0.8` | Per-user rate-limiting cooldown interval in seconds between interactions. |
+| `DOWNLOAD_DIR` | Path | `~/Downloads/MediaAggregator` | Destination directory for downloaded media files and `.magnet` files. Supports `~` home directory expansion. Fallback: `MEDIA_AGGREGATOR_DOWNLOAD_DIR`. |
+| `MAX_CONCURRENT_DOWNLOADS` | Integer | `3` | Maximum concurrent active background download transfers. |
+| `DEFAULT_MAX_SIZE_GB` | Float | `15.0` | Default file size threshold for stream filtering (in GB). |
+| `DOWNLOAD_CHUNK_SIZE_KB` | Integer | `1024` | Download stream buffer chunk size in Kilobytes (1024 KB = 1 MB). |
+| `DEFAULT_TORRENTIO_URL` | URL | `https://torrentio.strem.fun` | Base URL for Torrentio scraper add-on. |
+| `DEFAULT_CINEMETA_URL` | URL | `https://v3-cinemeta.strem.io` | Base URL for Cinemeta catalog and episode metadata. |
+| `DEFAULT_REALDEBRID_API_KEY` | String | `None` | *(Optional)* API key for Real-Debrid streaming resolution. |
+| `DEFAULT_ALLDEBRID_API_KEY` | String | `None` | *(Optional)* API key for AllDebrid streaming resolution. |
+| `LOG_LEVEL` | String | `INFO` | Logger verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. |
+
+### Security: Trusted Administrator Enforcement
+- `TELEGRAM_ADMIN_IDS` is the authoritative source of administrative privilege.
+- Unauthorized users **cannot** hijack or claim administrator status on an uninitialized bot when `TELEGRAM_ADMIN_IDS` is configured.
+- In `personal` mode, any user not listed in `TELEGRAM_ADMIN_IDS` or pre-approved by an administrator is denied access and their request is queued for admin review.
+- In `multi-user` mode, regular users can search, browse, and start downloads, but administrative endpoints (`/admin`, add-on modifications) remain strictly guarded.
 
 ---
 
@@ -261,7 +304,7 @@ Run the test suite with coverage:
 pytest -v --cov=media_aggregator tests/
 ```
 
-All 73 unit, integration, and regression tests verify:
+All 84 unit, integration, and regression tests verify:
 - Stream title and codec parsing
 - Base32 and hex infohash normalization
 - Magnet link generation and parsing
@@ -272,6 +315,7 @@ All 73 unit, integration, and regression tests verify:
 - Telegram bot configuration, callbacks, inline keyboards, and middlewares
 - Application services (MediaService, DownloadService, UserService, AddonService)
 - First-time setup wizard, user permissions, and multi-user isolation
+- Environment variable and `.env` configuration loading, startup validation, and trusted admin authorization rules
 
 ---
 

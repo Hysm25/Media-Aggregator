@@ -15,6 +15,7 @@ dependencies = [
     "click>=8.0.0",
     "aiogram>=3.3.0",
     "aiofiles>=23.2.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]

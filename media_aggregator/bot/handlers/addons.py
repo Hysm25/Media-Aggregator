@@ -39,8 +39,13 @@ async def handle_toggle_addon(
     callback: types.CallbackQuery,
     callback_data: AddonCallback,
     addon_service: AddonService,
+    user_record: UserRecord,
 ) -> None:
     """Toggle an add-on on or off."""
+    if not user_record.is_admin:
+        await callback.answer("🚫 Administrator privileges required.", show_alert=True)
+        return
+
     addons = await addon_service.list_addons()
     target = next((a for a in addons if a.id == callback_data.id), None)
     if not target:
@@ -57,8 +62,12 @@ async def handle_toggle_addon(
 
 
 @router.callback_query(AddonCallback.filter(F.action == "add_prompt"))
-async def handle_add_prompt(callback: types.CallbackQuery) -> None:
+async def handle_add_prompt(callback: types.CallbackQuery, user_record: UserRecord) -> None:
     """Explain how to add a manifest URL."""
+    if not user_record.is_admin:
+        await callback.answer("🚫 Administrator privileges required.", show_alert=True)
+        return
+
     await callback.message.answer(  # type: ignore
         "➕ **Install New Add-on**\n\n"
         "To register a new Stremio add-on, send the command:\n"

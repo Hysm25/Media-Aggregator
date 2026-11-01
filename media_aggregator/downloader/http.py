@@ -10,15 +10,33 @@ from pathlib import Path
 from typing import Callable, Optional
 import requests
 
-CHUNK_SIZE = 64 * 1024  # 64 KB chunks
+DEFAULT_CHUNK_SIZE_KB = 64
+try:
+    _env_chunk_kb = int(os.environ.get("DOWNLOAD_CHUNK_SIZE_KB", str(DEFAULT_CHUNK_SIZE_KB)))
+except ValueError:
+    _env_chunk_kb = DEFAULT_CHUNK_SIZE_KB
+CHUNK_SIZE = max(1, _env_chunk_kb) * 1024
 
 
 class HTTPDownloader:
     """HTTP/HTTPS media file downloader with byte-range resume and verification."""
 
-    def __init__(self, session: Optional[requests.Session] = None, timeout: float = 15.0):
+    def __init__(
+        self,
+        session: Optional[requests.Session] = None,
+        timeout: float = 15.0,
+        chunk_size: Optional[int] = None,
+    ):
         self.session = session or requests.Session()
         self.timeout = timeout
+        if chunk_size is not None:
+            self.chunk_size = chunk_size
+        else:
+            try:
+                env_kb = int(os.environ.get("DOWNLOAD_CHUNK_SIZE_KB", "64"))
+            except ValueError:
+                env_kb = 64
+            self.chunk_size = max(1, env_kb) * 1024
         self._cancel_event = threading.Event()
 
     def cancel(self) -> None:
@@ -127,7 +145,7 @@ class HTTPDownloader:
         speed_bps = 0.0
 
         with open(part_path, file_mode) as f:
-            for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+            for chunk in response.iter_content(chunk_size=self.chunk_size):
                 if self._cancel_event.is_set():
                     raise InterruptedError("Download was cancelled by user.")
 

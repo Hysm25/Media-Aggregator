@@ -1,17 +1,16 @@
-"""Authorization and personal bot protection middleware."""
+"""Authorization and bot protection middleware enforcing trusted admin and operating modes."""
 
 from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Dict
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
-from media_aggregator.bot.callbacks import AdminCallback
 from media_aggregator.bot.config import BotConfig
 from media_aggregator.services.user_service import UserService
 
 
 class AuthMiddleware(BaseMiddleware):
-    """Restricts bot access to authorized users and guides first-time administrator setup."""
+    """Restricts bot access based on BOT_MODE and trusted TELEGRAM_ADMIN_IDS."""
 
     def __init__(self, user_service: UserService, config: BotConfig):
         super().__init__()
@@ -39,26 +38,36 @@ class AuthMiddleware(BaseMiddleware):
             full_name=full_name,
         )
 
-        # Check if user ID is in static configured admin IDs
+        # Check if user ID is in static trusted admin IDs
         if uid in self.config.admin_ids and not user.is_admin:
             await self.user_service.make_admin(uid, username, full_name)
             user = await self.user_service.get_user(uid) or user
 
-        # Check if bot has zero administrators (First-Time Setup Mode)
+        # First-Time Setup Check
         has_admins = await self.user_service.has_admins()
         if not has_admins:
-            # Allow event through to trigger first-time setup wizard
-            data["user_record"] = user
-            data["is_setup_mode"] = True
-            return await handler(event, data)
+            # If trusted admin_ids are defined, only users listed there can trigger setup mode.
+            # If no admin_ids are defined, allow first user (fallback for backward compatibility).
+            if not self.config.admin_ids or uid in self.config.admin_ids:
+                data["user_record"] = user
+                data["is_setup_mode"] = True
+                return await handler(event, data)
+            # If admin_ids is configured and current user is not in it, they are not authorized
+            # to claim admin. Fall through to regular access checks.
 
-        # Authorized check
-        if user.is_allowed or user.is_admin:
+        # If user is admin or explicitly approved by an admin
+        if user.is_admin or user.is_allowed:
             data["user_record"] = user
             data["is_setup_mode"] = False
             return await handler(event, data)
 
-        # Unauthorized access handling
+        # Multi-user mode: allow any user to search, browse, and download
+        if self.config.bot_mode == "multi-user":
+            data["user_record"] = user
+            data["is_setup_mode"] = False
+            return await handler(event, data)
+
+        # Personal mode: restrict access for non-admin, unapproved users
         if isinstance(event, Message):
             if event.text and event.text.startswith("/start"):
                 await event.answer(

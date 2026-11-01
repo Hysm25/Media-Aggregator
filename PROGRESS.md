@@ -1,8 +1,8 @@
 # Project Progress: Media Source Aggregator & Telegram Bot
 
-**Current Local Time**: 2026-11-01T12:30:00Z  
-**Repository Commit**: `9c4cf85` (master)  
-**Test Suite Status**: 73 Passed / 0 Failed (75% Coverage)  
+**Current Local Time**: 2026-11-01T12:55:00Z  
+**Repository Commit**: `master`  
+**Test Suite Status**: 84 Passed / 0 Failed (75% Coverage across 2,936 statements)  
 **Package Version**: 1.0.0  
 
 ---
@@ -173,6 +173,21 @@ Statuses: `TODO` → `IN PROGRESS` → `IMPLEMENTED` → `VERIFIED` | `BLOCKED`
 | Add-on Provider Registry in Bot | **VERIFIED** | HIGH | `test_addon_service.py`; Add-on toggling and manifest URL installation via `/add_addon` |
 | Admin Panel & User Approval | **VERIFIED** | HIGH | `test_bot.py::test_admin_handlers`; Approve pending user access and inspect real-time database metrics |
 
+### 4.7 Environment Configuration & Security Enforcement
+| Feature | Status | Priority | Supporting Evidence / Source Reference |
+| :--- | :---: | :---: | :--- |
+| `.env` Loading via `python-dotenv` | **VERIFIED** | HIGH | `test_config.py::test_config_from_dotenv_file`; Parses 14 environment variables from custom `.env` |
+| Default Fallback Configuration | **VERIFIED** | HIGH | `test_config.py::test_config_defaults`; Default paths, ports, rate limits, and stream sizing thresholds |
+| CLI Argument Precedence | **VERIFIED** | HIGH | `test_config.py::test_config_cli_overrides`; CLI options override `.env` and environment variables |
+| Missing Token Startup Validation | **VERIFIED** | HIGH | `test_config.py::test_config_validation_missing_token`; Aborts startup with actionable error message |
+| Bot Token Format Validation | **VERIFIED** | HIGH | `test_config.py::test_config_validation_invalid_token_format`; Regex `<id>:<token>` checks |
+| Bot Operating Mode Validation | **VERIFIED** | HIGH | `test_config.py::test_config_validation_invalid_bot_mode`; Rejects values other than `personal` or `multi-user` |
+| Admin ID Parsing & Validation | **VERIFIED** | HIGH | `test_config.py::test_config_validation_invalid_admin_ids`; Rejects negative or non-integer admin IDs |
+| Numeric Range Boundaries | **VERIFIED** | HIGH | `test_config.py::test_config_validation_invalid_numeric_limits`; Rejects negative rate limits, concurrent downloads < 1 |
+| Trusted Admin Authority Enforcement | **VERIFIED** | HIGH | `test_config.py::test_unauthorized_user_cannot_claim_admin`; Untrusted users cannot hijack first-admin setup |
+| Multi-User Mode Permissions | **VERIFIED** | HIGH | `test_config.py::test_multi_user_mode_permissions`; Guests browse and search while admin tools stay locked |
+| Dynamic Storage/Downloader Paths | **VERIFIED** | HIGH | `test_config.py::test_storage_and_downloader_env_resolution`; `DATABASE_PATH`, `DOWNLOAD_DIR`, `CHUNK_SIZE` |
+
 ---
 
 ## 5. Test Suite & Coverage Status
@@ -180,8 +195,8 @@ Statuses: `TODO` → `IN PROGRESS` → `IMPLEMENTED` → `VERIFIED` | `BLOCKED`
 ### Coverage Summary
 ```text
 Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.17.0, pytest-asyncio-1.4.1
-Total Tests: 73 passed / 0 failed in 26.46s
-Overall Statement Coverage: 75% (2,809 statements, 702 missed)
+Total Tests: 84 passed / 0 failed in 35.75s
+Overall Statement Coverage: 75% (2,936 statements, 724 missed)
 ```
 
 ### Module Breakdown
@@ -190,6 +205,7 @@ Overall Statement Coverage: 75% (2,809 statements, 702 missed)
 - `media_aggregator/bot/callbacks.py`: 100%
 - `media_aggregator/bot/middlewares/__init__.py`: 100%
 - `media_aggregator/services/__init__.py`: 100%
+- `media_aggregator/downloader/torrent.py`: 100%
 - `media_aggregator/models.py`: 99%
 - `media_aggregator/services/user_service.py`: 98%
 - `media_aggregator/storage.py`: 96%
@@ -197,26 +213,29 @@ Overall Statement Coverage: 75% (2,809 statements, 702 missed)
 - `media_aggregator/parser.py`: 92%
 - `media_aggregator/providers/torrentio.py`: 90%
 - `media_aggregator/bot/keyboards.py`: 90%
+- `media_aggregator/bot/config.py`: 88%
 - `media_aggregator/aggregator.py`: 86%
-- `media_aggregator/bot/middlewares/auth.py`: 85%
 - `media_aggregator/bot/handlers/settings.py`: 84%
 - `media_aggregator/downloader/manager.py`: 82%
 - `media_aggregator/magnet.py`: 81%
 - `media_aggregator/services/media_service.py`: 81%
+- `media_aggregator/bot/middlewares/auth.py`: 80%
 - `media_aggregator/services/addon_service.py`: 80%
 - `media_aggregator/providers/base.py`: 79%
-- `media_aggregator/downloader/http.py`: 77%
+- `media_aggregator/bot/handlers/media.py`: 79%
+- `media_aggregator/bot/handlers/start.py`: 78%
 - `media_aggregator/services/download_service.py`: 76%
+- `media_aggregator/downloader/http.py`: 75%
 - `media_aggregator/bot/handlers/admin.py`: 75%
-- `media_aggregator/bot/handlers/start.py`: 75%
 - `media_aggregator/bot/handlers/search.py`: 68%
 - `media_aggregator/providers/cinemeta.py`: 68%
 - `media_aggregator/cli/ui.py`: 60%
-- `media_aggregator/bot/config.py`: 58%
 - `media_aggregator/providers/registry.py`: 54%
 - `media_aggregator/cli/main.py`: 51%
 - `media_aggregator/bot/handlers/downloads.py`: 45%
 - `media_aggregator/providers/generic.py`: 42%
+- `media_aggregator/bot/app.py`: 36%
+- `media_aggregator/bot/handlers/addons.py`: 30%
 
 ---
 
@@ -248,10 +267,12 @@ Overall Statement Coverage: 75% (2,809 statements, 702 missed)
 ## 8. Agent Handoff Guide
 
 ### Current Project State
-The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 73 automated tests pass with zero warnings (75% coverage across 2,809 statements).
+The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 84 automated tests pass with zero warnings (75% coverage across 2,936 statements). Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
 
 ### Critical Files to Know
+- **Configuration & Environment**: [`media_aggregator/bot/config.py`](file:///root/t.io/media_aggregator/bot/config.py), [`.env.example`](file:///root/t.io/.env.example)
 - **Telegram Bot Runner**: [`media_aggregator/bot/app.py`](file:///root/t.io/media_aggregator/bot/app.py) (aiogram dispatcher, dependency injection, lifecycle)
+- **Auth & Rate Limiting**: [`media_aggregator/bot/middlewares/auth.py`](file:///root/t.io/media_aggregator/bot/middlewares/auth.py), [`media_aggregator/bot/middlewares/rate_limit.py`](file:///root/t.io/media_aggregator/bot/middlewares/rate_limit.py)
 - **Bot Handlers**: [`media_aggregator/bot/handlers/`](file:///root/t.io/media_aggregator/bot/handlers/) (start, search, media, downloads, settings, addons, admin)
 - **Inline Keyboards**: [`media_aggregator/bot/keyboards.py`](file:///root/t.io/media_aggregator/bot/keyboards.py) (navigation, streams, pagination, admin)
 - **Application Services**: [`media_aggregator/services/`](file:///root/t.io/media_aggregator/services/) (media, download, user, addon services)

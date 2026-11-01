@@ -30,7 +30,8 @@ class StorageManager:
     """Manages SQLite persistent storage for media records, stream history, and downloads."""
 
     def __init__(self, db_path: Optional[str | Path] = None):
-        self.db_path = Path(db_path) if db_path else Path(os.environ.get("MEDIA_AGGREGATOR_DB", DEFAULT_DB_PATH))
+        raw_path = db_path or os.environ.get("DATABASE_PATH") or os.environ.get("MEDIA_AGGREGATOR_DB") or DEFAULT_DB_PATH
+        self.db_path = Path(raw_path).expanduser().resolve()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 

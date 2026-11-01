@@ -449,33 +449,59 @@ def config_torrentio_cmd(
 
 
 @cli.command("bot")
-@click.option("--token", help="Telegram Bot Token (or set TELEGRAM_BOT_TOKEN).")
+@click.option("--token", help="Telegram Bot Token (or set BOT_TOKEN / TELEGRAM_BOT_TOKEN).")
 @click.option("--admin", type=int, help="Initial Telegram Administrator User ID.")
 @click.option("--download-dir", help="Directory for storing downloaded media files.")
+@click.option("--db-path", help="Path to SQLite database file.")
+@click.option(
+    "--mode",
+    type=click.Choice(["personal", "multi-user"], case_sensitive=False),
+    help="Bot operating mode (personal or multi-user).",
+)
+@click.option("--env-file", type=click.Path(exists=True), help="Path to custom .env configuration file.")
 def bot_cmd(
     token: Optional[str],
     admin: Optional[int],
     download_dir: Optional[str],
+    db_path: Optional[str],
+    mode: Optional[str],
+    env_file: Optional[str],
 ) -> None:
     """🤖 Launch the Media Aggregator Telegram Bot."""
     import asyncio
     from media_aggregator.bot.app import run_bot
-    from media_aggregator.bot.config import BotConfig
+    from media_aggregator.bot.config import BotConfig, ConfigValidationError
 
-    cfg = BotConfig.from_env(token=token, admin_id=admin, download_dir=download_dir)
-    if not cfg.bot_token:
-        console.print(
-            "[bold red]Error:[/bold red] No Telegram Bot Token specified.\n"
-            "Provide --token or set the [bold]TELEGRAM_BOT_TOKEN[/bold] environment variable."
+    try:
+        cfg = BotConfig.from_env(
+            dotenv_path=env_file,
+            token=token,
+            admin_id=admin,
+            download_dir=download_dir,
+            database_path=db_path,
+            bot_mode=mode,
+            validate=True,
         )
+    except ConfigValidationError as e:
+        console.print(f"[bold red]Configuration Error:[/bold red]\n{e}")
         raise click.Abort()
 
+    masked_token = (
+        f"{cfg.bot_token[:6]}...{cfg.bot_token[-4:]}"
+        if len(cfg.bot_token) > 10
+        else "***"
+    )
+
     console.print("[bold cyan]Starting Media Aggregator Telegram Bot...[/bold cyan]")
+    console.print(f"[green]Operating Mode:[/green] {cfg.bot_mode}")
+    console.print(f"[green]Bot Token:[/green] {masked_token}")
     if cfg.admin_ids:
-        console.print(f"[green]Configured Admins:[/green] {cfg.admin_ids}")
+        console.print(f"[green]Trusted Admins:[/green] {cfg.admin_ids}")
     else:
         console.print("[yellow]No admins pre-configured. First-time setup wizard will activate on /start.[/yellow]")
     console.print(f"[green]Download Directory:[/green] {cfg.download_dir}")
+    console.print(f"[green]Database Path:[/green] {cfg.database_path}")
+    console.print(f"[green]Log Level:[/green] {cfg.log_level}")
 
     try:
         asyncio.run(run_bot(cfg))

@@ -35,7 +35,8 @@ class DownloadManager:
         download_dir: Optional[str | Path] = None,
     ):
         self.storage = storage or StorageManager()
-        self.download_dir = Path(download_dir) if download_dir else DEFAULT_DOWNLOAD_DIR
+        raw_dir = download_dir or os.environ.get("DOWNLOAD_DIR") or os.environ.get("MEDIA_AGGREGATOR_DOWNLOAD_DIR") or DEFAULT_DOWNLOAD_DIR
+        self.download_dir = Path(raw_dir).expanduser().resolve()
         self.download_dir.mkdir(parents=True, exist_ok=True)
         self.http_downloader = HTTPDownloader()
 
