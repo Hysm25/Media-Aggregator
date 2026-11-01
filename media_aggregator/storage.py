@@ -60,6 +60,7 @@ class StorageManager:
                     year TEXT,
                     poster TEXT,
                     background TEXT,
+                    logo TEXT,
                     synopsis TEXT,
                     genres TEXT,
                     cast_members TEXT,
@@ -172,6 +173,11 @@ class StorageManager:
             if "user_id" not in columns_bm:
                 cursor.execute("ALTER TABLE bookmarks ADD COLUMN user_id INTEGER DEFAULT 0")
 
+            cursor.execute("PRAGMA table_info(media_cache)")
+            columns_mc = [row["name"] for row in cursor.fetchall()]
+            if "logo" not in columns_mc:
+                cursor.execute("ALTER TABLE media_cache ADD COLUMN logo TEXT")
+
             conn.commit()
 
         # Seed initial default providers if empty
@@ -234,9 +240,9 @@ class StorageManager:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO media_cache (
-                    id, title, type, year, poster, background, synopsis, genres, cast_members,
+                    id, title, type, year, poster, background, logo, synopsis, genres, cast_members,
                     director, imdb_rating, runtime, episodes_json, cached_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 (
                     item.id,
@@ -245,6 +251,7 @@ class StorageManager:
                     item.year,
                     item.poster,
                     item.background,
+                    item.logo,
                     item.synopsis,
                     genres_json,
                     cast_json,
@@ -268,6 +275,9 @@ class StorageManager:
                 raw_eps = json.loads(row["episodes_json"])
                 episodes = [EpisodeItem(**ep) for ep in raw_eps]
 
+            has_logo = "logo" in row.keys()
+            logo_val = row["logo"] if has_logo else None
+
             return MediaItem(
                 id=row["id"],
                 title=row["title"],
@@ -275,6 +285,7 @@ class StorageManager:
                 year=row["year"],
                 poster=row["poster"],
                 background=row["background"],
+                logo=logo_val,
                 synopsis=row["synopsis"],
                 genres=json.loads(row["genres"] or "[]"),
                 cast=json.loads(row["cast_members"] or "[]"),

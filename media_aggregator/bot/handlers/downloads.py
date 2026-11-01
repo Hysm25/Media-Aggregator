@@ -11,6 +11,7 @@ from media_aggregator.bot.keyboards import (
     downloads_list_keyboard,
     main_menu_keyboard,
 )
+from media_aggregator.bot.ui_utils import escape_markdown
 from media_aggregator.models import DownloadRecord, DownloadStatus, UserRecord
 from media_aggregator.services.download_service import DownloadService
 from media_aggregator.services.media_service import MediaService
@@ -48,10 +49,10 @@ async def handle_start_download(
     callback: types.CallbackQuery,
     callback_data: StreamCallback,
     media_service: MediaService,
-    download_service: DownloadService,
     user_record: UserRecord,
+    **kwargs,
 ) -> None:
-    """Initiate async download of selected stream."""
+    """Handle legacy download triggers by enforcing Magnet-only downloads."""
     is_series = callback_data.season > 0
     season_arg = callback_data.season if is_series else None
     episode_arg = callback_data.episode if is_series else None
@@ -68,91 +69,33 @@ async def handle_start_download(
         return
 
     stream = streams[callback_data.idx]
+    if not stream.is_torrent:
+        await callback.answer(
+            "Direct HTTP file downloads are disabled in Telegram. Only Magnet downloads for external torrent clients are supported.",
+            show_alert=True,
+        )
+        return
+
+    magnet_uri = stream.build_magnet_uri()
+    if not magnet_uri:
+        await callback.answer("Could not build Magnet link.", show_alert=True)
+        return
+
     item = await media_service.get_details(callback_data.id)
     title = item.title if item else callback_data.id
     if is_series:
         title = f"{title} S{callback_data.season:02d}E{callback_data.episode:02d}"
 
-    status_msg = await callback.message.edit_text(  # type: ignore
-        f"⏳ **Starting Download**\n\n"
-        f"🎬 **Title**: `{title}`\n"
-        f"⚙️ **Type**: {stream.source_type.value.upper()}\n"
-        "Initializing download engine...",
-        parse_mode="Markdown",
-    )
-
-    async def on_progress(record: DownloadRecord) -> None:
-        try:
-            bar = format_progress_bar(record.progress_percent)
-            dl_str = format_bytes(record.downloaded_bytes)
-            tot_str = format_bytes(record.total_bytes) if record.total_bytes > 0 else "N/A"
-            spd_str = format_speed(record.speed_bps)
-            eta_str = f"{record.eta_seconds}s" if record.eta_seconds else "calculating..."
-
-            text = (
-                f"⏳ **Downloading**: `{title}`\n\n"
-                f"{bar}\n"
-                f"💾 **Progress**: {dl_str} / {tot_str}\n"
-                f"🚀 **Speed**: {spd_str} • ⏱️ **ETA**: {eta_str}"
-            )
-            await status_msg.edit_text(
-                text,
-                parse_mode="Markdown",
-                reply_markup=download_control_keyboard(record.id or 0, is_active=True),
-            )
-        except Exception:
-            pass
-
-    async def on_completed(record: DownloadRecord) -> None:
-        try:
-            text = (
-                f"✅ **Download Completed!**\n\n"
-                f"🎬 **Title**: `{title}`\n"
-                f"📁 **Local File**: `{record.local_path}`\n"
-                f"💾 **Size**: {format_bytes(record.downloaded_bytes)}"
-            )
-            await status_msg.edit_text(
-                text,
-                parse_mode="Markdown",
-                reply_markup=download_control_keyboard(record.id or 0, is_active=False),
-            )
-        except Exception:
-            pass
-
-    async def on_failed(record: DownloadRecord, err: str) -> None:
-        try:
-            text = (
-                f"❌ **Download Failed**\n\n"
-                f"🎬 **Title**: `{title}`\n"
-                f"⚠️ **Error**: `{err}`"
-            )
-            await status_msg.edit_text(
-                text,
-                parse_mode="Markdown",
-                reply_markup=download_control_keyboard(record.id or 0, is_active=False),
-            )
-        except Exception:
-            pass
-
-    rec = await download_service.start_download(
-        stream=stream,
-        media_id=callback_data.id,
-        media_title=title,
-        user_id=user_record.user_id,
-        on_progress=on_progress,
-        on_completed=on_completed,
-        on_failed=on_failed,
-    )
-
-    if stream.is_torrent:
-        await status_msg.edit_text(
-            f"✅ **Torrent Source Processed!**\n\n"
-            f"🎬 **Title**: `{title}`\n"
-            f"📁 **Magnet File**: `{rec.local_path}`\n\n"
-            f"💡 *The `.magnet` file was saved and dispatched to your local BitTorrent client.*",
+    if callback.message:
+        await callback.message.answer(
+            f"🧲 **BitTorrent Magnet URI**\n\n"
+            f"🎬 **Release**: `{escape_markdown(title)}`\n"
+            f"📊 **Resolution**: {stream.resolution} • 💾 **Size**: {stream.size_display or 'Unknown'}\n\n"
+            f"```\n{magnet_uri}\n```\n"
+            "Direct in-bot file downloads are disabled. Tap above to copy the Magnet link into your BitTorrent client.",
             parse_mode="Markdown",
-            reply_markup=download_control_keyboard(rec.id or 0, is_active=False),
         )
+    await callback.answer("Magnet link delivered!")
 
 
 @router.callback_query(StreamCallback.filter(F.action == "magnet"))
@@ -179,39 +122,116 @@ async def handle_copy_magnet(
         return
 
     stream = streams[callback_data.idx]
+    if not stream.is_torrent:
+        await callback.answer("This stream is Direct HTTP, not a torrent source.", show_alert=True)
+        return
+
     magnet_uri = stream.build_magnet_uri()
     if not magnet_uri:
         await callback.answer("Could not build Magnet link.", show_alert=True)
         return
 
-    await callback.message.answer(  # type: ignore
-        f"🧲 **Magnet URI**\n\n"
-        f"```\n{magnet_uri}\n```\n"
-        "Tap the text above to copy it into your clipboard.",
-        parse_mode="Markdown",
+    item = await media_service.get_details(callback_data.id)
+    title = item.title if item else callback_data.id
+    if is_series:
+        title = f"{title} S{callback_data.season:02d}E{callback_data.episode:02d}"
+
+    if callback.message:
+        await callback.message.answer(
+            f"🧲 **BitTorrent Magnet URI**\n\n"
+            f"🎬 **Release**: `{escape_markdown(title)}`\n"
+            f"📊 **Resolution**: {stream.resolution} • 💾 **Size**: {stream.size_display or 'Unknown'}\n\n"
+            f"```\n{magnet_uri}\n```\n"
+            "Tap the text above to copy it into your BitTorrent client (e.g. qBittorrent, Transmission, Flud).",
+            parse_mode="Markdown",
+        )
+    await callback.answer("🧲 Magnet URI generated!")
+
+
+@router.callback_query(StreamCallback.filter(F.action == "magnet_file"))
+async def handle_send_magnet_file(
+    callback: types.CallbackQuery,
+    callback_data: StreamCallback,
+    media_service: MediaService,
+    user_record: UserRecord,
+) -> None:
+    """Generate and deliver a .magnet file for opening directly with an external torrent client."""
+    is_series = callback_data.season > 0
+    season_arg = callback_data.season if is_series else None
+    episode_arg = callback_data.episode if is_series else None
+
+    streams = await media_service.get_streams(
+        media_id=callback_data.id,
+        season=season_arg,
+        episode=episode_arg,
+        settings=user_record.settings,
     )
-    await callback.answer("Magnet link sent!")
+
+    if not streams or callback_data.idx >= len(streams):
+        await callback.answer("Stream not found.", show_alert=True)
+        return
+
+    stream = streams[callback_data.idx]
+    if not stream.is_torrent:
+        await callback.answer("This stream is Direct HTTP, not a torrent source.", show_alert=True)
+        return
+
+    magnet_uri = stream.build_magnet_uri()
+    if not magnet_uri:
+        await callback.answer("Could not build Magnet link.", show_alert=True)
+        return
+
+    item = await media_service.get_details(callback_data.id)
+    base_title = item.title if item else callback_data.id
+    if is_series:
+        base_title = f"{base_title}_S{callback_data.season:02d}E{callback_data.episode:02d}"
+
+    clean_filename = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in base_title)
+
+    doc = types.BufferedInputFile(
+        magnet_uri.encode("utf-8"),
+        filename=f"{clean_filename}.magnet",
+    )
+    if callback.message:
+        await callback.message.answer_document(
+            document=doc,
+            caption=(
+                f"📁 **BitTorrent Magnet File**: `{clean_filename}.magnet`\n\n"
+                f"📊 **Resolution**: {stream.resolution} • 💾 **Size**: {stream.size_display or 'Unknown'}\n"
+                "Open this file with your BitTorrent client (e.g. qBittorrent, Transmission, LibreTorrent, Flud)."
+            ),
+            parse_mode="Markdown",
+        )
+    await callback.answer("📁 .magnet file sent!")
 
 
 @router.callback_query(NavCallback.filter(F.action == "downloads"))
 @router.message(Command("downloads"))
 async def handle_list_downloads(
     event: types.Message | types.CallbackQuery,
-    download_service: DownloadService,
-    user_record: UserRecord,
+    *args,
+    user_record: Optional[UserRecord] = None,
+    **kwargs,
 ) -> None:
-    """Display active downloads and recent history."""
-    downloads = await download_service.get_download_history(user_id=user_record.user_id, limit=10)
-    if not downloads:
-        text = "📥 **Downloads**\n\nNo active or past downloads found."
-        keyboard = main_menu_keyboard(is_admin=user_record.is_admin)
-    else:
-        text = (
-            f"📥 **Downloads ({len(downloads)})**\n\n"
-            "Select an item to view detailed status or controls:"
-        )
-        keyboard = downloads_list_keyboard(downloads)
-
+    """Display information about Magnet-only downloads in Telegram."""
+    user = user_record
+    for a in args:
+        if isinstance(a, UserRecord):
+            user = a
+    is_admin = user.is_admin if user else False
+    text = (
+        "📥 **Downloads in Telegram — Magnet Only**\n\n"
+        "Direct media file downloading on the server has been disabled in Telegram.\n\n"
+        "**How to Download Media**:\n"
+        "1. Search for any movie or TV series using `/search <title>`\n"
+        "2. Select a title and browse seasons/episodes\n"
+        "3. Choose your preferred stream source\n"
+        "4. Tap **🧲 Get Magnet URI** to copy the magnet link\n"
+        "   or **📁 Send .magnet File** to download the file directly\n"
+        "5. Open it with your external BitTorrent client (e.g. qBittorrent, Transmission, Flud)\n\n"
+        "💡 *Direct HTTP streams are distinguished from Magnet streams and cannot be downloaded directly in Telegram.*"
+    )
+    keyboard = main_menu_keyboard(is_admin=is_admin)
     if isinstance(event, types.CallbackQuery):
         await event.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)  # type: ignore
         await event.answer()
@@ -223,38 +243,24 @@ async def handle_list_downloads(
 async def handle_view_download(
     callback: types.CallbackQuery,
     callback_data: DownloadCallback,
-    download_service: DownloadService,
+    download_service: Optional[DownloadService] = None,
+    *args,
+    **kwargs,
 ) -> None:
-    """Display detailed progress and options for a specific download."""
-    rec = await download_service.get_download(callback_data.id)
+    """Display download record details (legacy view)."""
+    rec = await download_service.get_download(callback_data.id) if download_service else None
     if not rec:
-        await callback.answer("Download record not found.", show_alert=True)
+        await callback.answer("Direct file downloading is disabled in Telegram. Use Magnet links.", show_alert=True)
         return
-
-    is_active = rec.status == DownloadStatus.DOWNLOADING
-    bar = format_progress_bar(rec.progress_percent)
-    dl_str = format_bytes(rec.downloaded_bytes)
-    tot_str = format_bytes(rec.total_bytes) if rec.total_bytes > 0 else "N/A"
-
-    lines = [
-        f"📥 **Download Job #{rec.id}**\n",
-        f"🎬 **Title**: `{rec.media_title}`",
-        f"📊 **Status**: {rec.status.value.upper()}",
-        f"⚙️ **Source**: {rec.source_type.value.upper()}",
-        f"{bar}",
-        f"💾 **Transferred**: {dl_str} / {tot_str}",
-    ]
-    if rec.local_path:
-        lines.append(f"📁 **Path**: `{rec.local_path}`")
-    if rec.error_message:
-        lines.append(f"⚠️ **Message**: `{rec.error_message}`")
-
-    text = "\n".join(lines)
-    await callback.message.edit_text(  # type: ignore
-        text,
-        parse_mode="Markdown",
-        reply_markup=download_control_keyboard(rec.id or 0, is_active=is_active),
-    )
+    if callback.message:
+        await callback.message.edit_text(  # type: ignore
+            f"📥 **Download Job #{rec.id}**\n\n"
+            f"🎬 **Title**: `{rec.media_title}`\n"
+            f"📊 **Status**: {rec.status.value.upper()}\n\n"
+            "💡 *Direct downloads are disabled in Telegram. Use Magnet links.*",
+            parse_mode="Markdown",
+            reply_markup=download_control_keyboard(rec.id or 0, is_active=False),
+        )
     await callback.answer()
 
 
@@ -262,20 +268,19 @@ async def handle_view_download(
 async def handle_cancel_download(
     callback: types.CallbackQuery,
     callback_data: DownloadCallback,
-    download_service: DownloadService,
+    download_service: Optional[DownloadService] = None,
+    *args,
+    **kwargs,
 ) -> None:
-    """Cancel an ongoing download."""
-    await download_service.cancel_download(callback_data.id)
+    """Cancel legacy download job."""
+    if download_service:
+        await download_service.cancel_download(callback_data.id)
     await callback.answer("🚫 Download cancelled.")
-    # Refresh view
-    rec = await download_service.get_download(callback_data.id)
-    if rec:
+    if callback.message:
         await callback.message.edit_text(  # type: ignore
-            f"🚫 **Download Cancelled**\n\n"
-            f"🎬 **Title**: `{rec.media_title}`\n"
-            f"Download was aborted by user.",
+            "🚫 **Download Cancelled**\n\nDirect file downloads are disabled in Telegram.",
             parse_mode="Markdown",
-            reply_markup=download_control_keyboard(rec.id or 0, is_active=False),
+            reply_markup=download_control_keyboard(callback_data.id, is_active=False),
         )
 
 
@@ -283,33 +288,18 @@ async def handle_cancel_download(
 async def handle_refresh_download(
     callback: types.CallbackQuery,
     callback_data: DownloadCallback,
-    download_service: DownloadService,
+    download_service: Optional[DownloadService] = None,
+    *args,
+    **kwargs,
 ) -> None:
-    """Refresh single download view."""
-    rec = await download_service.get_download(callback_data.id)
-    if not rec:
-        await callback.answer("Record not found.", show_alert=True)
-        return
+    """Refresh legacy download job view."""
+    await callback.answer("Direct file downloads are disabled in Telegram. Use Magnet links.", show_alert=True)
 
-    is_active = rec.status == DownloadStatus.DOWNLOADING
-    bar = format_progress_bar(rec.progress_percent)
-    dl_str = format_bytes(rec.downloaded_bytes)
-    tot_str = format_bytes(rec.total_bytes) if rec.total_bytes > 0 else "N/A"
 
-    lines = [
-        f"📥 **Download Job #{rec.id}**\n",
-        f"🎬 **Title**: `{rec.media_title}`",
-        f"📊 **Status**: {rec.status.value.upper()}",
-        f"{bar}",
-        f"💾 **Transferred**: {dl_str} / {tot_str}",
-    ]
-    if rec.speed_bps > 0:
-        lines.append(f"🚀 **Speed**: {format_speed(rec.speed_bps)}")
-
-    text = "\n".join(lines)
-    await callback.message.edit_text(  # type: ignore
-        text,
-        parse_mode="Markdown",
-        reply_markup=download_control_keyboard(rec.id or 0, is_active=is_active),
+@router.callback_query(DownloadCallback.filter())
+async def handle_legacy_download_callback(callback: types.CallbackQuery, **kwargs) -> None:
+    """Inform user that direct background download management is disabled in Telegram."""
+    await callback.answer(
+        "Direct file downloading is disabled in Telegram. Use Magnet links for your torrent client.",
+        show_alert=True,
     )
-    await callback.answer("Refreshed.")

@@ -127,12 +127,13 @@ def test_all_keyboards():
             resolution="1080p",
             size_display="2.5 GB",
             seeders=40,
+            info_hash="aabbccddeeff00112233445566778899aabbccdd",
         )
     ]
     kb_st = streams_keyboard("tt1", streams)
     assert len(kb_st.inline_keyboard) >= 2
     kb_act = stream_action_keyboard("tt1", streams[0])
-    assert any("Start Download" in btn.text for row in kb_act.inline_keyboard for btn in row)
+    assert any("Magnet" in btn.text for row in kb_act.inline_keyboard for btn in row)
 
     # Downloads
     dls = [

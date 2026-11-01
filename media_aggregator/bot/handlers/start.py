@@ -30,7 +30,7 @@ async def handle_start(message: types.Message, user_record: UserRecord, is_setup
     await message.answer(
         f"👋 **Welcome to Media Source Aggregator**, {user_record.full_name or 'friend'}!\n\n"
         "Search movies and TV shows, resolve multi-provider streaming sources, "
-        "and manage high-speed downloads directly through Telegram.\n\n"
+        "and obtain Magnet links or `.magnet` files for external BitTorrent clients.\n\n"
         "Select an option from the menu below:",
         parse_mode="Markdown",
         reply_markup=main_menu_keyboard(is_admin=is_admin),
@@ -86,12 +86,12 @@ async def handle_help(event: types.Message | types.CallbackQuery, user_record: U
         "• **Search**: Type any movie or TV series title directly or use `/search <title>`.\n"
         "• **Browse**: Navigate seasons, inspect episodes, and review cast/synopsis.\n"
         "• **Streams**: Aggregates from Torrentio, Cinemeta, and other Stremio add-ons.\n"
-        "• **Downloads**: Download HTTP/Debrid streams with resume or export `.magnet` files.\n"
+        "• **Downloads**: Magnet-only downloads. Copy Magnet URIs or download `.magnet` files for external torrent clients.\n"
         "• **Settings**: Customize resolution (4K/1080p), min seeders, and CAM filtering.\n\n"
         "**Available Commands**:\n"
         "`/start` - Open main menu\n"
         "`/search <query>` - Search movies and series\n"
-        "`/downloads` - View active and completed downloads\n"
+        "`/downloads` - Information on Magnet downloads\n"
         "`/settings` - Configure user preferences\n"
         "`/addons` - Manage Stremio add-on providers\n"
         "`/help` - Show this help reference"

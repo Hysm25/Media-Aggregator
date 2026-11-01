@@ -16,8 +16,8 @@ An independent, extensible Python media aggregator inspired by Torrentio and the
 - **Persistent Local Records & Multi-User Support**: Embedded SQLite database (`~/.media_aggregator/data.db`) storing media metadata cache, discovered stream history, download jobs, registered users, and provider configurations with user-level isolation.
 - **Interactive CLI & Rich Formatting**: Terminal interface built with Click and Rich, displaying colored tables, details panels, and progress bars.
 - **Search Relevance & Ranking Engine**: Multi-tiered ranking algorithm prioritizing exact title matches above partials, normalized matching without leading articles, typo tolerance (Levenshtein distance), release year extraction, media type keyword hints, and multi-provider duplicate merging.
-- **Stremio-Like Visual Media Cards**: Mobile-optimized Telegram interface featuring actual high-resolution poster images rendered via Bot API 7.0 large media preview, formatted synopsis, IMDb ratings, runtimes, cast, and 1-tap stream discovery.
-- **Telegram Bot Interface (aiogram 3.x)**: Full-featured asynchronous Telegram Bot interface with inline navigation keyboards, movie/series search, season and episode browsing, live download progress bars, background workers, restart recovery, rate-limiting, and an admin dashboard.
+- **Stremio-Like Visual Media Cards & Cinemeta Artwork**: Mobile-optimized Telegram interface featuring actual high-resolution Cinemeta portrait posters (Metahub medium/large and Amazon uncropped originals), landscape backdrop art, official transparent logos, formatted synopsis, IMDb ratings, runtimes, cast, and 1-tap stream discovery.
+- **Telegram Bot Interface (aiogram 3.x) — Magnet-Only Downloads**: Full-featured asynchronous Telegram Bot interface with inline navigation keyboards, movie/series search, season and episode browsing, stream pagination, RFC Magnet URI and `.magnet` file delivery for external torrent clients (direct server file downloads disabled in Telegram), and an admin dashboard.
 
 ---
 
@@ -239,23 +239,27 @@ cp .env.example .env
 
 ## 🤖 Telegram Bot Interface
 
-The Media Aggregator Telegram Bot transforms the CLI tool into a private, multi-user media streaming and downloading assistant.
+The Media Aggregator Telegram Bot transforms the CLI tool into a private, multi-user media streaming and Magnet-only downloading assistant.
 
-### Features
-- **Interactive Inline Navigation**: Paginated search results, season and episode pickers, stream quality selectors, and detailed media cards.
-- **Background Downloader**: Non-blocking chunked HTTP downloading with rate-throttled visual progress bars (`[████████░░] 45.2%`) and ETA updates.
-- **Magnet Dispatch**: View clickable RFC Magnet links or receive `.magnet` files directly in Telegram.
-- **First-Time Setup Wizard**: If no administrator is configured, the first user to message `/start` is guided to claim administrative ownership.
-- **User Authorization & Isolation**: Operates by default in personal mode. Unapproved users are queued for administrator authorization (`/admin`). All bookmarks, downloads, and search settings are strictly isolated per user.
-- **Download Persistence Across Restarts**: Interrupted downloads from bot restarts are gracefully recovered and marked in SQLite.
-- **Anti-Flood Rate Limiting**: Enforces request cooldowns to prevent hitting Telegram API rate limits.
+### Magnet-Only Workflow
+The Telegram bot strictly uses external torrent client delivery for downloads:
+`Search → Details → Seasons/Episodes → Streams → Magnet Download`
+- **🧲 Get Magnet URI**: Delivers clickable RFC-compliant Magnet links directly to the chat for 1-tap clipboard copying.
+- **📁 Send .magnet File**: Generates and uploads `.magnet` files directly as Telegram documents, allowing immediate opening in external mobile or desktop BitTorrent clients (e.g. qBittorrent, Transmission, Flud, LibreTorrent).
+- **Direct HTTP Distinction**: Direct HTTP streams are clearly marked as stream-only and cannot be downloaded directly in Telegram.
+- **Shared Downloader Preservation**: The Python download engine (`HTTPDownloader`, `DownloadManager`, byte-range resume, SHA-256 validation) remains fully available for CLI operations outside Telegram.
+
+### Cinemeta Artwork & Media Cards
+- **High-Quality Portrait Posters**: Automatically upgrades low-resolution thumbnails (e.g. Amazon `_V1_SX250.jpg` crops) to full 800px+ high-res masters and Metahub medium/large portraits.
+- **Landscape Backdrop Art**: Dedicated `🖼️ View Backdrop` action allows users to inspect official cinematic background artwork without replacing portrait posters.
+- **Official Logos & Caching**: Extracts transparent official logos (`item.logo`) from `/meta/{type}/{id}.json` with in-memory TTL and persistent SQLite caching.
 
 ### Bot Commands
 | Command | Description |
 | :--- | :--- |
 | `/start` | Launch main navigation menu or run first-time setup wizard |
 | `/search <title>` | Search movies and TV series across Stremio catalogs |
-| `/downloads` | View active downloads, progress bars, and historical jobs |
+| `/downloads` | Information and instructions on Magnet-only downloads |
 | `/settings` | Customize preferred resolution (4K/1080p), min seeds, and CAM filters |
 | `/addons` | Manage and toggle Stremio add-on providers |
 | `/admin` | Administrator panel for approving users and viewing system metrics |
@@ -306,10 +310,12 @@ Run the test suite with coverage:
 pytest -v --cov=media_aggregator tests/
 ```
 
-All 107 unit, integration, and regression tests verify:
+All 136 unit, integration, and regression tests verify:
 - Stream title and codec parsing
 - Base32 and hex infohash normalization
 - Magnet link generation, extraction from `externalUrl`, and parsing
+- Magnet-only Telegram downloads (URI and `.magnet` file delivery, HTTP download restriction)
+- Cinemeta artwork optimization (portrait poster uncropping, Metahub medium/large, backdrop, logo)
 - Multi-provider concurrency and deduplication
 - HTTP chunked range download and SHA-256 validation
 - SQLite caching, stream tracking, and download state persistence

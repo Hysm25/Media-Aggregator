@@ -75,6 +75,7 @@ class MediaItem(BaseModel):
     year: Optional[str] = None
     poster: Optional[str] = None
     background: Optional[str] = None
+    logo: Optional[str] = None
     synopsis: Optional[str] = None
     genres: List[str] = Field(default_factory=list)
     cast: List[str] = Field(default_factory=list)

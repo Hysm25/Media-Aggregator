@@ -1,8 +1,8 @@
 # Project Progress: Media Source Aggregator & Telegram Bot
 
-**Current Local Time**: 2026-11-01T15:50:00Z  
+**Current Local Time**: 2026-11-01T17:28:00Z  
 **Repository Commit**: `master`  
-**Test Suite Status**: 123 Passed / 0 Failed (74% Coverage across 3,717 statements)  
+**Test Suite Status**: 136 Passed / 0 Failed (76% Coverage across 3,807 statements)  
 **Package Version**: 1.0.0  
 
 ---
@@ -255,6 +255,21 @@ Features are classified under strict audit rules:
 | Page-Aware Return Navigation | **VERIFIED** | HIGH | `EpisodeCallback` and `StreamCallback` carry `page: int = 0`; returning from a stream detail card restores the exact page the user was inspecting ([`callbacks.py`](file:///root/t.io/media_aggregator/bot/callbacks.py#L20-L40)) |
 | Live Torrentio Count vs Display | **VERIFIED** | HIGH | `test_live_torrentio_api_vs_displayed_count`; Live Breaking Bad S01E01 returns 77 streams from Torrentio; all 76 valid torrent streams retained and accessible across 16 pages |
 
+### 4.12 Magnet-Only Downloads & Cinemeta Image Enhancements
+| Feature | Status | Priority | Supporting Evidence / Source Reference |
+| :--- | :---: | :---: | :--- |
+| Magnet-Only Telegram Workflow | **VERIFIED** | HIGH | `test_stream_action_keyboard_magnet_only_and_no_http_download`; Streams keyboard only offers `🧲 Get Magnet URI` and `📁 Send .magnet File` ([`stream_action_keyboard`](file:///root/t.io/media_aggregator/bot/keyboards.py#L339-L375)) |
+| Direct HTTP Download Prohibition | **VERIFIED** | HIGH | `test_handle_start_download_rejects_direct_http`; Direct HTTP streams display no download button and reject execution with clear alert ([`handle_start_download`](file:///root/t.io/media_aggregator/bot/handlers/downloads.py#L46-L75)) |
+| Magnet Document Telegram Delivery | **VERIFIED** | HIGH | `test_handle_copy_magnet_and_send_magnet_file`; Delivers clean `.magnet` file via `BufferedInputFile` for 1-tap external torrent client launch ([`handle_send_magnet_file`](file:///root/t.io/media_aggregator/bot/handlers/downloads.py#L150-L205)) |
+| Main Menu & /downloads Revision | **VERIFIED** | HIGH | `test_main_menu_and_downloads_command_magnet_only_info`; Downloads dashboard button removed from root menu; `/downloads` explains external client Magnet workflow |
+| CLI Download Engine Preservation | **VERIFIED** | HIGH | `test_cli_and_shared_downloader_remain_functional`; `HTTPDownloader` and `DownloadManager` remain fully operational for CLI use outside Telegram |
+| Portrait Poster Quality Optimization | **VERIFIED** | HIGH | `test_enhance_poster_url_metahub_and_amazon_cdn`; Uncrops Amazon CDN downscaling (`._V1_SX250.jpg` -> `._V1_SX800.jpg` 419KB master) and upgrades Metahub `small` to `medium` ([`images.py`](file:///root/t.io/media_aggregator/images.py#L25-L60)) |
+| Cinemeta Background & Logo Extraction | **VERIFIED** | HIGH | `test_enhance_background_and_logo_url`, `test_cinemeta_provider_meta_dict_parsing_with_logo_and_background`; Extracts `background` and `logo` from Cinemeta `/meta/{type}/{id}.json` |
+| Landscape Backdrop Viewing Action | **VERIFIED** | HIGH | `test_backdrop_view_interaction`; `🖼️ View Backdrop` button in `media_detail_keyboard` displays landscape backdrop without replacing portrait poster ([`handle_media_backdrop`](file:///root/t.io/media_aggregator/bot/handlers/media.py#L90-L125)) |
+| Image URL Validation & Fake Poster Prevention | **VERIFIED** | HIGH | `test_missing_invalid_and_unavailable_image_urls`; Rejects local, broken, and malformed URLs; never fabricates fake posters for items lacking images |
+| Metadata Caching & Provider Fallback | **VERIFIED** | HIGH | `test_metadata_caching_and_provider_failure_fallback`; 10-minute in-memory cache delivers 0ms detail views; network failures fall back safely to SQLite cache ([`MediaService.get_details`](file:///root/t.io/media_aggregator/services/media_service.py#L100-L175)) |
+| Live Cinemeta Metadata Verification | **VERIFIED** | `LIVE VERIFIED` | `test_live_cinemeta_metadata_and_image_endpoint`; Live query to `https://v3-cinemeta.strem.io` for Inception (`tt1375666`) retrieved valid 200 OK image endpoint |
+
 ---
 
 ## 5. Test Suite & Coverage Status
@@ -262,8 +277,8 @@ Features are classified under strict audit rules:
 ### Coverage Summary
 ```text
 Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.1.0, pytest-asyncio-1.4.1
-Total Tests: 123 passed / 0 failed in 40.24s
-Overall Statement Coverage: 74% (3,717 statements, 952 missed)
+Total Tests: 136 passed / 0 failed in 41.79s
+Overall Statement Coverage: 76% (3,807 statements, 922 missed)
 ```
 
 ### Module Breakdown
@@ -336,7 +351,7 @@ Overall Statement Coverage: 74% (3,717 statements, 952 missed)
 ## 8. Agent Handoff Guide
 
 ### Current Project State
-The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 123 automated tests pass with zero warnings (74% coverage across 3,717 statements), with both mock tests and live external network integrations passing. Multi-tier search ranking (`media_aggregator/search.py`) provides mathematical immunity for exact title matches over partial matches, tolerates typos, extracts year hints, routes media types, promotes provider diversity on page 1, and merges duplicate records. Stream discovery supports all 25 official Torrentio scrapers, preserves embedded user configurations, deduplicates multi-file release packs by file index, and provides complete pagination (`◀️ Prev`, `📄 X/Y`, `Next ▶️`) with a 5-minute memory cache in the Telegram UI. Live endpoints for Cinemeta (`v3-cinemeta.strem.io`) and Torrentio (`torrentio.strem.fun`) have been verified for movies, TV series, episode breakdowns, stream resolution, and Magnet link generation. Telegram presentation features Stremio-like visual media cards (`media_aggregator/bot/ui_utils.py`) displaying actual posters above formatted metadata with 1-tap stream discovery. Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
+The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 136 automated tests pass with zero warnings (76% coverage across 3,807 statements), with both mock tests and live external network integrations passing. Multi-tier search ranking (`media_aggregator/search.py`) provides mathematical immunity for exact title matches over partial matches, tolerates typos, extracts year hints, routes media types, promotes provider diversity on page 1, and merges duplicate records. The Telegram Bot implements a strictly Magnet-only download flow (`Search → Details → Seasons/Episodes → Streams → Magnet Download`), delivering RFC-compliant Magnet URIs and `.magnet` files for external BitTorrent clients while prohibiting direct in-bot HTTP file downloads. Visual presentation is powered by official Cinemeta artwork (`media_aggregator/images.py`), automatically uncropping Amazon CDN thumbnails to high-resolution masters, upgrading Metahub portrait posters, and supporting landscape backdrop inspection. Stream discovery supports all 25 official Torrentio scrapers with complete stream pagination and 5-minute memory caching. Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
 
 ### Critical Files to Know
 - **Search & Ranking Engine**: [`media_aggregator/search.py`](file:///root/t.io/media_aggregator/search.py) (scoring, fuzzy matching, query parsing, deduplication)

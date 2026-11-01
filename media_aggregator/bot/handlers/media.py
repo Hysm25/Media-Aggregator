@@ -91,6 +91,43 @@ async def handle_toggle_bookmark(
     )
 
 
+@router.callback_query(MediaCallback.filter(F.action == "backdrop"))
+async def handle_media_backdrop(
+    callback: types.CallbackQuery,
+    callback_data: MediaCallback,
+    media_service: MediaService,
+    user_record: UserRecord,
+) -> None:
+    """Display landscape backdrop artwork for a media item without replacing the portrait poster."""
+    item = await media_service.get_details(callback_data.id)
+    if not item or not item.background:
+        await callback.answer("Backdrop artwork not available.", show_alert=True)
+        return
+
+    safe_title = escape_markdown(item.title)
+    caption = f"🖼️ *{safe_title}* — Official Artwork\n\nLandscape backdrop provided by Cinemeta."
+    back_kb = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="🔙 Back to Media Details",
+                    callback_data=MediaCallback(id=item.id, action="view").pack(),
+                )
+            ]
+        ]
+    )
+
+    if callback.message:
+        await render_media_card(
+            message=callback.message,
+            item=item,
+            caption=caption,
+            reply_markup=back_kb,
+            image_url=item.background,
+        )
+    await callback.answer()
+
+
 @router.callback_query(MediaCallback.filter(F.action == "seasons"))
 async def handle_seasons_view(
     callback: types.CallbackQuery,
@@ -221,7 +258,7 @@ async def handle_episode_streams(
         lines.append(f"**{stream_num}.** {icon} `[{res}]` {escape_markdown(rel_name)}")
         lines.append(f"     💾 {size}{seeds} • ⚙️ {escape_markdown(prov)}")
 
-    lines.append("\nSelect a source to inspect details, copy Magnet, or start downloading:")
+    lines.append("\nSelect a source to inspect details and obtain Magnet download links:")
 
     if callback.message:
         await safe_edit_or_replace_message(
@@ -266,9 +303,12 @@ async def handle_stream_detail_view(
     title = stream.release_title or stream.title or "Media Stream"
     safe_title = escape_markdown(title)
 
-    source_type_str = "🧲 BitTorrent (Magnet Available)" if stream.is_torrent else "🌐 Direct HTTP"
-    if stream.is_debrid:
-        source_type_str = "⚡ Debrid Cloud Stream"
+    if stream.is_torrent:
+        source_type_str = "🧲 BitTorrent (Magnet Available)"
+    elif stream.is_debrid:
+        source_type_str = "⚡ Debrid Cloud Stream (Direct download disabled — Magnet only)"
+    else:
+        source_type_str = "🌐 Direct HTTP (Direct download disabled — Magnet only)"
 
     lines = [
         "⚡ **Stream Source Information**\n",

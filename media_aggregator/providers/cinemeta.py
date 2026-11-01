@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import urllib.parse
 from typing import Any, Dict, List, Optional, Union
+from media_aggregator.images import enhance_background_url, enhance_logo_url, enhance_poster_url
 from media_aggregator.models import AddonManifest, EpisodeItem, MediaItem, MediaType, StreamSource
 from media_aggregator.providers.base import BaseProvider
 
@@ -45,8 +46,9 @@ class CinemetaProvider(BaseProvider):
         raw_year = item.get("year") or item.get("releaseInfo")
         year = str(raw_year) if raw_year else None
 
-        poster = item.get("poster")
-        background = item.get("background")
+        poster = enhance_poster_url(item.get("poster"), imdb_id=m_id)
+        background = enhance_background_url(item.get("background"), imdb_id=m_id)
+        logo = enhance_logo_url(item.get("logo"), imdb_id=m_id)
         synopsis = item.get("description") or item.get("overview")
         genres = item.get("genres") or item.get("genre") or []
         if isinstance(genres, str):
@@ -90,6 +92,7 @@ class CinemetaProvider(BaseProvider):
             year=year,
             poster=poster,
             background=background,
+            logo=logo,
             synopsis=synopsis,
             genres=genres,
             cast=cast,

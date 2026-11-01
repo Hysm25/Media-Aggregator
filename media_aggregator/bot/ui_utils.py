@@ -7,6 +7,7 @@ from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, Mock
 from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InputMediaPhoto, LinkPreviewOptions
+from media_aggregator.images import is_valid_image_url
 from media_aggregator.models import MediaItem, MediaType
 
 logger = logging.getLogger("media_aggregator.bot.ui_utils")
@@ -27,14 +28,6 @@ def escape_markdown(text: str) -> str:
     for ch in ("*", "_", "`", "[", "]"):
         text = text.replace(ch, f"\\{ch}")
     return text
-
-
-def is_valid_image_url(url: Optional[str]) -> bool:
-    """Check if URL looks like a valid external HTTP/HTTPS image URL."""
-    if not url or not isinstance(url, str):
-        return False
-    u = url.strip()
-    return u.startswith("http://") or u.startswith("https://")
 
 
 def format_media_caption(

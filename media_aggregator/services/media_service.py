@@ -31,6 +31,7 @@ class MediaService:
         self.aggregator = StreamAggregator()
         self._search_cache: Dict[str, Tuple[float, List[MediaItem]]] = {}
         self._stream_cache: Dict[str, Tuple[float, List[StreamSource]]] = {}
+        self._meta_cache: Dict[str, Tuple[float, MediaItem]] = {}
 
     def has_cached_streams(
         self,
@@ -99,20 +100,51 @@ class MediaService:
         return results
 
     async def get_details(self, media_id: str, media_type: Optional[MediaType] = None) -> Optional[MediaItem]:
-        """Retrieve media metadata, checking local cache first then remote providers."""
+        """Retrieve rich media metadata, checking memory and local storage before querying Cinemeta."""
+        cache_key = f"{media_id}:{media_type.value if media_type else 'any'}"
+        now = time.time()
+
+        if cache_key in self._meta_cache:
+            ts, mem_item = self._meta_cache[cache_key]
+            if now - ts < 600.0:  # 10 minutes memory TTL
+                return mem_item
+
         cached = self.storage.get_media_item(media_id)
+        # Check if item already has detailed synopsis or episode list from previous /meta/ retrieval
         if cached and (cached.synopsis or cached.episodes):
+            self._meta_cache[cache_key] = (now, cached)
             return cached
 
         actual_type = media_type or (cached.type if cached else None)
+
+        def _merge(new_item: MediaItem, old_item: Optional[MediaItem]) -> MediaItem:
+            if not old_item:
+                return new_item
+            return MediaItem(
+                id=new_item.id or old_item.id,
+                title=new_item.title or old_item.title,
+                type=new_item.type,
+                year=new_item.year or old_item.year,
+                poster=new_item.poster or old_item.poster,
+                background=new_item.background or old_item.background,
+                logo=new_item.logo or old_item.logo,
+                synopsis=new_item.synopsis or old_item.synopsis,
+                genres=new_item.genres if new_item.genres else old_item.genres,
+                cast=new_item.cast if new_item.cast else old_item.cast,
+                director=new_item.director or old_item.director,
+                imdb_rating=new_item.imdb_rating or old_item.imdb_rating,
+                runtime=new_item.runtime or old_item.runtime,
+                episodes=new_item.episodes if new_item.episodes else old_item.episodes,
+            )
 
         def _fetch() -> Optional[MediaItem]:
             # 1. Try primary Cinemeta provider
             try:
                 item = self.cinemeta.get_metadata(media_id, media_type=actual_type)
                 if item:
-                    self.storage.save_media_item(item)
-                    return item
+                    merged = _merge(item, cached)
+                    self.storage.save_media_item(merged)
+                    return merged
             except Exception as e:
                 logger.debug(f"Cinemeta get_metadata failed for {media_id}: {e}")
 
@@ -123,15 +155,19 @@ class MediaService:
                 try:
                     item = provider.get_metadata(media_id=media_id, media_type=actual_type)
                     if item:
-                        self.storage.save_media_item(item)
-                        return item
+                        merged = _merge(item, cached)
+                        self.storage.save_media_item(merged)
+                        return merged
                 except Exception as e:
                     logger.debug(f"Provider '{provider.name}' get_metadata failed for {media_id}: {e}")
 
             return None
 
         remote_item = await asyncio.to_thread(_fetch)
-        return remote_item or cached
+        final_item = remote_item or cached
+        if final_item:
+            self._meta_cache[cache_key] = (now, final_item)
+        return final_item
 
     async def get_streams(
         self,

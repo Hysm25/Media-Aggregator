@@ -31,24 +31,23 @@ from media_aggregator.models import (
 
 
 def main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
-    """Build root main menu keyboard."""
+    """Build root main menu keyboard without direct file download dashboard."""
     buttons = [
         [
             InlineKeyboardButton(text="🔍 Search Media", callback_data=NavCallback(action="search").pack()),
-            InlineKeyboardButton(text="📥 Downloads", callback_data=NavCallback(action="downloads").pack()),
         ],
         [
             InlineKeyboardButton(text="⚙️ Settings", callback_data=NavCallback(action="settings").pack()),
             InlineKeyboardButton(text="🧩 Add-ons", callback_data=NavCallback(action="addons").pack()),
+        ],
+        [
+            InlineKeyboardButton(text="ℹ️ Help & Info", callback_data=NavCallback(action="help").pack()),
         ],
     ]
     if is_admin:
         buttons.append([
             InlineKeyboardButton(text="👑 Admin Dashboard", callback_data=NavCallback(action="admin").pack()),
         ])
-    buttons.append([
-        InlineKeyboardButton(text="ℹ️ Help & Info", callback_data=NavCallback(action="help").pack()),
-    ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -134,7 +133,7 @@ def media_detail_keyboard(
     is_bookmarked: bool = False,
     query: Optional[str] = None,
 ) -> InlineKeyboardMarkup:
-    """Build media details action keyboard with back-to-search option."""
+    """Build media details action keyboard with back-to-search option and optional backdrop view."""
     buttons = []
     if item.type == MediaType.SERIES:
         buttons.append([
@@ -151,21 +150,30 @@ def media_detail_keyboard(
             )
         ])
 
+    action_row = []
+    if item.background:
+        action_row.append(
+            InlineKeyboardButton(
+                text="🖼️ View Backdrop",
+                callback_data=MediaCallback(id=item.id, action="backdrop").pack(),
+            )
+        )
     bm_text = "🗑️ Remove Bookmark" if is_bookmarked else "⭐ Bookmark"
-    action_row = [
+    action_row.append(
         InlineKeyboardButton(
             text=bm_text,
             callback_data=MediaCallback(id=item.id, action="bookmark").pack(),
         )
-    ]
+    )
+    buttons.append(action_row)
+
     if query:
-        action_row.append(
+        buttons.append([
             InlineKeyboardButton(
                 text="🔙 Back to Results",
                 callback_data=SearchCallback(query=query[:20], page=0).pack(),
             )
-        )
-    buttons.append(action_row)
+        ])
 
     buttons.append([
         InlineKeyboardButton(text="🔍 Search", callback_data=NavCallback(action="search").pack()),
@@ -338,27 +346,13 @@ def stream_action_keyboard(
     stream_idx: int = 0,
     page: int = 0,
 ) -> InlineKeyboardMarkup:
-    """Build action buttons for a single selected stream."""
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text="⬇️ Start Download",
-                callback_data=StreamCallback(
-                    id=media_id,
-                    season=season,
-                    episode=episode,
-                    idx=stream_idx,
-                    action="dl",
-                    page=page,
-                ).pack(),
-            )
-        ]
-    ]
+    """Build action buttons for a single selected stream, strictly Magnet-only for downloads."""
+    buttons: List[List[InlineKeyboardButton]] = []
 
     if stream.is_torrent:
         buttons.append([
             InlineKeyboardButton(
-                text="🧲 Copy Magnet Link",
+                text="🧲 Get Magnet URI",
                 callback_data=StreamCallback(
                     id=media_id,
                     season=season,
@@ -367,7 +361,18 @@ def stream_action_keyboard(
                     action="magnet",
                     page=page,
                 ).pack(),
-            )
+            ),
+            InlineKeyboardButton(
+                text="📁 Send .magnet File",
+                callback_data=StreamCallback(
+                    id=media_id,
+                    season=season,
+                    episode=episode,
+                    idx=stream_idx,
+                    action="magnet_file",
+                    page=page,
+                ).pack(),
+            ),
         ])
 
     buttons.append([
