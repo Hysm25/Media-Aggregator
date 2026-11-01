@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import urllib.parse
 from typing import Any, Dict, List, Optional
-from media_aggregator.models import MediaType, StreamSource
+from media_aggregator.models import AddonManifest, MediaType, StreamSource
 from media_aggregator.parser import parse_torrentio_stream
 from media_aggregator.providers.base import BaseProvider
+
+logger = logging.getLogger("media_aggregator.providers.torrentio")
 
 DEFAULT_TORRENTIO_PROVIDERS = [
     "yts",
@@ -47,6 +50,17 @@ class TorrentioProvider(BaseProvider):
         self.debrid_api_key = debrid_api_key
         self.debrid_options = debrid_options
         self.custom_config_path = custom_config_path
+
+        # Pre-seed default manifest conforming to Stremio protocol
+        self._manifest = AddonManifest(
+            id="com.stremio.torrentio.addon",
+            name="Torrentio",
+            version="1.0.14",
+            description="Torrent and debrid stream provider scraping major trackers.",
+            resources=["stream"],
+            types=["movie", "series", "anime", "other"],
+            id_prefixes=["tt", "kitsu"],
+        )
 
     def build_config_path(self) -> str:
         """Construct Torrentio's pipe-delimited configuration path."""
@@ -92,8 +106,14 @@ class TorrentioProvider(BaseProvider):
         """Fetch torrent and streaming sources from Torrentio."""
         type_str = media_type.value
 
-        # For series, Stremio format is {imdb_id}:{season}:{episode}
-        if media_type == MediaType.SERIES and season is not None and episode is not None:
+        # Determine target_id
+        if ":" in media_id:
+            target_id = media_id
+        elif media_id.startswith("kitsu:") and episode is not None:
+            # Anime Kitsu IDs in Torrentio use kitsu:{id}:{episode}
+            target_id = f"{media_id}:{episode}"
+        elif media_type == MediaType.SERIES and season is not None and episode is not None:
+            # For TV series, Stremio standard format is {imdb_id}:{season}:{episode}
             target_id = f"{media_id}:{season}:{episode}"
         else:
             target_id = media_id
@@ -111,5 +131,6 @@ class TorrentioProvider(BaseProvider):
                 stream = parse_torrentio_stream(item, provider_name=self.name)
                 results.append(stream)
             return results
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Torrentio streams query failed for {type_str}/{target_id}: {e}")
             return []

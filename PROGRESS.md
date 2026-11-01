@@ -1,8 +1,8 @@
 # Project Progress: Media Source Aggregator & Telegram Bot
 
-**Current Local Time**: 2026-11-01T12:55:00Z  
+**Current Local Time**: 2026-11-01T13:52:00Z  
 **Repository Commit**: `master`  
-**Test Suite Status**: 84 Passed / 0 Failed (75% Coverage across 2,936 statements)  
+**Test Suite Status**: 93 Passed / 0 Failed (74% Coverage across 3,152 statements)  
 **Package Version**: 1.0.0  
 
 ---
@@ -188,15 +188,29 @@ Statuses: `TODO` → `IN PROGRESS` → `IMPLEMENTED` → `VERIFIED` | `BLOCKED`
 | Multi-User Mode Permissions | **VERIFIED** | HIGH | `test_config.py::test_multi_user_mode_permissions`; Guests browse and search while admin tools stay locked |
 | Dynamic Storage/Downloader Paths | **VERIFIED** | HIGH | `test_config.py::test_storage_and_downloader_env_resolution`; `DATABASE_PATH`, `DOWNLOAD_DIR`, `CHUNK_SIZE` |
 
+### 4.8 Search Bug Fixes & Stremio Add-on Protocol Conformance
+| Feature | Status | Priority | Supporting Evidence / Source Reference |
+| :--- | :---: | :---: | :--- |
+| Cinemeta None-Type Regression Fix | **VERIFIED** | HIGH | `tests/test_search_stremio_compat.py::test_cinemeta_search_none_type_regression`; Fixed `AttributeError: 'NoneType' object has no attribute 'value'` when query runs with default `media_type=None` |
+| Unified Multi-Catalog Search | **VERIFIED** | HIGH | `CinemetaProvider.search` queries both `movie` and `series` catalogs and deduplicates results across titles |
+| Stremio `idPrefixes` Enforcement | **VERIFIED** | HIGH | `test_stremio_id_prefixes_capability`; `BaseProvider.supports_id_prefix` verifies ID formats (e.g. `tt` for Cinemeta/Torrentio, `kitsu` for Kitsu Anime) |
+| Flexible Metadata Signatures | **VERIFIED** | HIGH | `test_cinemeta_get_metadata_flexible_signatures`; Accepts `(media_type, media_id)`, `(media_id, media_type=...)`, and keyword arguments |
+| Direct Magnet Link Parsing | **VERIFIED** | HIGH | `test_stremio_stream_magnet_and_youtube_parsing`; `parse_generic_stream` handles magnet links in `url`/`externalUrl`, extracting `info_hash`, `file_idx`, seeders emoji `👤`, and trackers |
+| YouTube Trailer Stream Parsing | **VERIFIED** | MEDIUM | `test_stremio_stream_magnet_and_youtube_parsing`; Converts `ytId` streams to standard YouTube watch URLs |
+| Markdown Text Escaping & Error Recovery | **VERIFIED** | HIGH | `test_perform_search_markdown_safety_and_error_handling`; Telegram Markdown characters (`_`, `*`, `[`, `]`, `` ` ``) properly escaped; network exceptions gracefully presented |
+| TV Series Release Info Fallback | **VERIFIED** | HIGH | `CinemetaProvider` and `GenericStremioProvider` extract `releaseInfo` (e.g. `2008-2013`) for TV series when `year` is absent |
+| Full Search-to-Stream Telegram Flow | **VERIFIED** | HIGH | `test_complete_telegram_search_to_stream_flow`; End-to-end integration test spanning search, media details, season view, episode selector, and stream resolution |
+| Live Stremio Endpoint Integration | **VERIFIED** | HIGH | `test_live_cinemeta_and_torrentio_integration`; Verified against live `https://v3-cinemeta.strem.io` and `https://torrentio.strem.fun` endpoints |
+
 ---
 
 ## 5. Test Suite & Coverage Status
 
 ### Coverage Summary
 ```text
-Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.17.0, pytest-asyncio-1.4.1
-Total Tests: 84 passed / 0 failed in 35.75s
-Overall Statement Coverage: 75% (2,936 statements, 724 missed)
+Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.1.0, pytest-asyncio-1.4.1
+Total Tests: 93 passed / 0 failed in 55.83s
+Overall Statement Coverage: 74% (3,152 statements, 817 missed)
 ```
 
 ### Module Breakdown
@@ -208,33 +222,33 @@ Overall Statement Coverage: 75% (2,936 statements, 724 missed)
 - `media_aggregator/downloader/torrent.py`: 100%
 - `media_aggregator/models.py`: 99%
 - `media_aggregator/services/user_service.py`: 98%
+- `media_aggregator/parser.py`: 97%
 - `media_aggregator/storage.py`: 96%
 - `media_aggregator/bot/middlewares/rate_limit.py`: 96%
-- `media_aggregator/parser.py`: 92%
-- `media_aggregator/providers/torrentio.py`: 90%
 - `media_aggregator/bot/keyboards.py`: 90%
 - `media_aggregator/bot/config.py`: 88%
+- `media_aggregator/providers/torrentio.py`: 87%
 - `media_aggregator/aggregator.py`: 86%
 - `media_aggregator/bot/handlers/settings.py`: 84%
 - `media_aggregator/downloader/manager.py`: 82%
 - `media_aggregator/magnet.py`: 81%
-- `media_aggregator/services/media_service.py`: 81%
 - `media_aggregator/bot/middlewares/auth.py`: 80%
 - `media_aggregator/services/addon_service.py`: 80%
-- `media_aggregator/providers/base.py`: 79%
 - `media_aggregator/bot/handlers/media.py`: 79%
 - `media_aggregator/bot/handlers/start.py`: 78%
+- `media_aggregator/providers/cinemeta.py`: 77%
 - `media_aggregator/services/download_service.py`: 76%
 - `media_aggregator/downloader/http.py`: 75%
 - `media_aggregator/bot/handlers/admin.py`: 75%
-- `media_aggregator/bot/handlers/search.py`: 68%
-- `media_aggregator/providers/cinemeta.py`: 68%
+- `media_aggregator/bot/handlers/search.py`: 73%
+- `media_aggregator/services/media_service.py`: 66%
 - `media_aggregator/cli/ui.py`: 60%
-- `media_aggregator/providers/registry.py`: 54%
+- `media_aggregator/providers/base.py`: 54%
 - `media_aggregator/cli/main.py`: 51%
+- `media_aggregator/providers/registry.py`: 49%
 - `media_aggregator/bot/handlers/downloads.py`: 45%
-- `media_aggregator/providers/generic.py`: 42%
 - `media_aggregator/bot/app.py`: 36%
+- `media_aggregator/providers/generic.py`: 36%
 - `media_aggregator/bot/handlers/addons.py`: 30%
 
 ---
@@ -267,7 +281,7 @@ Overall Statement Coverage: 75% (2,936 statements, 724 missed)
 ## 8. Agent Handoff Guide
 
 ### Current Project State
-The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 84 automated tests pass with zero warnings (75% coverage across 2,936 statements). Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
+The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 93 automated tests pass with zero warnings (74% coverage across 3,152 statements). Unified movie and TV series search is fixed, and Stremio protocol compliance is enhanced (catalog querying, `idPrefixes` capability checks, direct magnet parsing, releaseInfo fallback). Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
 
 ### Critical Files to Know
 - **Configuration & Environment**: [`media_aggregator/bot/config.py`](file:///root/t.io/media_aggregator/bot/config.py), [`.env.example`](file:///root/t.io/.env.example)

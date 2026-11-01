@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List, Optional, Tuple
 import requests
 from media_aggregator.models import AddonConfig, AddonManifest, MediaType
@@ -10,6 +11,8 @@ from media_aggregator.providers.cinemeta import CinemetaProvider
 from media_aggregator.providers.generic import GenericStremioProvider
 from media_aggregator.providers.torrentio import TorrentioProvider
 from media_aggregator.storage import StorageManager
+
+logger = logging.getLogger("media_aggregator.providers.registry")
 
 
 class ProviderRegistry:
@@ -55,16 +58,50 @@ class ProviderRegistry:
                 return p
         # Fallback to any provider supporting search
         for p in providers:
-            if p.supports_resource("catalog") or p.supports_resource("meta"):
+            if p.supports_resource("catalog", media_type=media_type) or p.supports_resource("meta", media_type=media_type):
                 return p
         # Default fallback
         return CinemetaProvider()
 
-    def get_stream_providers(self) -> List[BaseProvider]:
-        """Get all active providers capable of returning streams."""
+    def get_catalog_providers(self, media_type: Optional[MediaType] = None) -> List[BaseProvider]:
+        """Get all active providers capable of returning catalogs and search results."""
         providers = self.get_active_providers()
-        # Filter to those that declare the stream resource in their manifest
-        return [p for p in providers if p.supports_resource("stream")]
+        catalog_providers = [
+            p for p in providers
+            if p.supports_resource("catalog", media_type=media_type)
+        ]
+        if not catalog_providers:
+            return [self.get_discovery_provider(media_type=media_type)]
+        return catalog_providers
+
+    def get_metadata_providers(
+        self,
+        media_type: Optional[MediaType] = None,
+        media_id: Optional[str] = None,
+    ) -> List[BaseProvider]:
+        """Get all active providers capable of returning full media metadata."""
+        providers = self.get_active_providers()
+        meta_providers = [
+            p for p in providers
+            if p.supports_resource("meta", media_type=media_type)
+            and (not media_id or p.supports_id_prefix(media_id, resource_name="meta"))
+        ]
+        if not meta_providers:
+            return [self.get_discovery_provider(media_type=media_type)]
+        return meta_providers
+
+    def get_stream_providers(
+        self,
+        media_type: Optional[MediaType] = None,
+        media_id: Optional[str] = None,
+    ) -> List[BaseProvider]:
+        """Get all active providers capable of returning streams, respecting declared capabilities."""
+        providers = self.get_active_providers()
+        return [
+            p for p in providers
+            if p.supports_resource("stream", media_type=media_type)
+            and (not media_id or p.supports_id_prefix(media_id, resource_name="stream"))
+        ]
 
     def register_addon_by_url(self, manifest_or_base_url: str, priority: int = 10) -> Tuple[bool, str, Optional[AddonConfig]]:
         """Validate, probe, and register a new Stremio addon from its URL."""
@@ -79,7 +116,7 @@ class ProviderRegistry:
         try:
             resp = requests.get(
                 manifest_url,
-                headers={"User-Agent": "MediaSourceAggregator/1.0.0"},
+                headers={"User-Agent": "MediaSourceAggregator/1.0.0 (Stremio/Compatible; Linux)"},
                 timeout=10,
             )
             resp.raise_for_status()
@@ -93,6 +130,8 @@ class ProviderRegistry:
             opts = {
                 "resources": data.get("resources", []),
                 "types": data.get("types", []),
+                "catalogs": data.get("catalogs", []),
+                "id_prefixes": data.get("idPrefixes", []),
             }
             config = AddonConfig(
                 id=addon_id,
@@ -104,6 +143,6 @@ class ProviderRegistry:
                 config_options=opts,
             )
             self.storage.save_addon(config)
-            return True, f"Successfully registered addon: {name} ({addon_id})", config
+            return True, f"Successfully registered '{name}' ({addon_id}).", config
         except Exception as e:
-            return False, f"Failed to connect or parse addon manifest: {str(e)}", None
+            return False, f"Failed to retrieve or parse manifest from {manifest_url}: {e}", None

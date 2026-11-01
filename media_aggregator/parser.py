@@ -182,6 +182,11 @@ def parse_torrentio_stream(raw: Dict[str, Any], provider_name: str = "Torrentio"
     audio = extract_audio(combined_text)
     size_bytes = parse_size_to_bytes(size_str)
 
+    trackers = []
+    for s in raw.get("sources", []):
+        if isinstance(s, str) and s.startswith("tracker:"):
+            trackers.append(s[len("tracker:"):])
+
     stream_id = info_hash or url or f"{release_title}_{file_idx}"
 
     return StreamSource(
@@ -206,6 +211,7 @@ def parse_torrentio_stream(raw: Dict[str, Any], provider_name: str = "Torrentio"
         hdr=hdr,
         languages=languages,
         behavior_hints=behavior_hints,
+        trackers=trackers,
         is_debrid=is_debrid,
     )
 
@@ -219,6 +225,19 @@ def parse_generic_stream(raw: Dict[str, Any], provider_name: str) -> StreamSourc
     url = raw.get("url") or raw.get("externalUrl")
     behavior_hints = raw.get("behaviorHints", {})
 
+    # Check for direct magnet link in url or externalUrl
+    if not info_hash and url and url.startswith("magnet:?"):
+        from media_aggregator.magnet import parse_magnet_link
+        parsed_magnet = parse_magnet_link(url)
+        if parsed_magnet and parsed_magnet.get("info_hash"):
+            info_hash = parsed_magnet["info_hash"]
+            if file_idx is None and parsed_magnet.get("file_idx") is not None:
+                file_idx = parsed_magnet["file_idx"]
+
+    # Check for YouTube ytId
+    if not url and raw.get("ytId"):
+        url = f"https://www.youtube.com/watch?v={raw['ytId']}"
+
     combined_text = f"{name} {title}"
     resolution, quality = extract_resolution_and_quality(combined_text)
     codecs = extract_codecs(combined_text)
@@ -227,9 +246,9 @@ def parse_generic_stream(raw: Dict[str, Any], provider_name: str) -> StreamSourc
 
     # Check for seeders or size in title if present
     seeders = None
-    seed_match = re.search(r"\b(\d+)\s*(?:seeds|seeders|peer)\b", combined_text, re.IGNORECASE)
+    seed_match = re.search(r"(?:👤\s*(\d+)|\b(\d+)\s*(?:seeds|seeders|peer)\b)", combined_text, re.IGNORECASE)
     if seed_match:
-        seeders = int(seed_match.group(1))
+        seeders = int(seed_match.group(1) or seed_match.group(2))
 
     size_bytes = None
     size_str = None
@@ -238,12 +257,17 @@ def parse_generic_stream(raw: Dict[str, Any], provider_name: str) -> StreamSourc
         size_str = size_match.group(1)
         size_bytes = parse_size_to_bytes(size_str)
 
-    if info_hash:
+    if info_hash or (url and url.startswith("magnet:?")):
         source_type = SourceType.TORRENT
     elif url and (url.startswith("http://") or url.startswith("https://")):
         source_type = SourceType.HTTP
     else:
         source_type = SourceType.UNKNOWN
+
+    trackers = []
+    for s in raw.get("sources", []):
+        if isinstance(s, str) and s.startswith("tracker:"):
+            trackers.append(s[len("tracker:"):])
 
     stream_id = info_hash or url or f"{title}_{file_idx}"
 
@@ -266,4 +290,5 @@ def parse_generic_stream(raw: Dict[str, Any], provider_name: str) -> StreamSourc
         audio=audio,
         hdr=hdr,
         behavior_hints=behavior_hints,
+        trackers=trackers,
     )

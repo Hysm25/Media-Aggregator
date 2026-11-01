@@ -304,10 +304,10 @@ Run the test suite with coverage:
 pytest -v --cov=media_aggregator tests/
 ```
 
-All 84 unit, integration, and regression tests verify:
+All 93 unit, integration, and regression tests verify:
 - Stream title and codec parsing
 - Base32 and hex infohash normalization
-- Magnet link generation and parsing
+- Magnet link generation, extraction from `externalUrl`, and parsing
 - Multi-provider concurrency and deduplication
 - HTTP chunked range download and SHA-256 validation
 - SQLite caching, stream tracking, and download state persistence
@@ -316,6 +316,8 @@ All 84 unit, integration, and regression tests verify:
 - Application services (MediaService, DownloadService, UserService, AddonService)
 - First-time setup wizard, user permissions, and multi-user isolation
 - Environment variable and `.env` configuration loading, startup validation, and trusted admin authorization rules
+- Unified movie and TV series search across multiple Stremio catalogs
+- Stremio add-on `idPrefixes` capability enforcement, flexible metadata signatures, and releaseInfo fallbacks
 
 ---
 
