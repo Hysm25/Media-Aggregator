@@ -1,15 +1,15 @@
-# Project Progress: Media Source Aggregator
+# Project Progress: Media Source Aggregator & Telegram Bot
 
-**Current Local Time**: 2026-11-01T12:00:00Z  
-**Repository Branch**: `master`  
-**Test Suite Status**: 49 Passed / 0 Failed (76% Coverage)  
+**Current Local Time**: 2026-11-01T12:30:00Z  
+**Repository Commit**: `9c4cf85` (master)  
+**Test Suite Status**: 73 Passed / 0 Failed (75% Coverage)  
 **Package Version**: 1.0.0  
 
 ---
 
 ## 1. Project Overview & Objectives
 
-The **Media Source Aggregator** is an independent, protocol-compliant Python media discovery and stream resolution engine inspired by the Stremio ecosystem and the Torrentio add-on scraper.
+The **Media Source Aggregator** is an independent, protocol-compliant Python media discovery, stream resolution, and download engine inspired by the Stremio ecosystem and the Torrentio add-on scraper. It features both a Click/Rich command-line interface and an asynchronous Telegram Bot interface built with `aiogram 3.x`.
 
 ### Primary Objectives
 - **Protocol Agnosticism**: Implement the open Stremio Add-on Protocol (v1–v3) for metadata, catalogs, and streaming links.
@@ -17,7 +17,8 @@ The **Media Source Aggregator** is an independent, protocol-compliant Python med
 - **Intelligent Deduplication**: Remove duplicate streams by `infoHash` and URL, merge tracker lists, and retain maximum peer counts.
 - **Rich Stream Parsing**: Extract resolution, video formats (`Dolby Vision`, `HDR10+`, `10-bit`), audio codecs (`Dolby Atmos`, `TrueHD`, `DTS-HD MA`, `DD+ 5.1`), file sizes, seeds, and indexers.
 - **Resilient Downloader Engine**: Provide chunked HTTP downloads with byte-range resume (`Range: bytes=X-`), SHA-256 verification, RFC Magnet URI generation, and local client dispatch (`aria2c`, `qbittorrent`, `transmission`).
-- **Persistent Local Records**: Maintain an embedded SQLite store (`~/.media_aggregator/data.db`) for caching, stream history, download jobs, and registered providers.
+- **Telegram Bot Interface (aiogram 3.x)**: Full-featured asynchronous bot with inline keyboards, live progress bars, background workers, restart recovery, rate-limiting, and an admin dashboard.
+- **Multi-User Isolation**: User-level isolation for settings, download history, and bookmarks in SQLite with administrator approval workflows.
 
 ---
 
@@ -26,10 +27,10 @@ The **Media Source Aggregator** is an independent, protocol-compliant Python med
 ```text
 /root/t.io/
 ├── media_aggregator/
-│   ├── models.py             # Pydantic data models: MediaItem, EpisodeItem, StreamSource, DownloadRecord
+│   ├── models.py             # Pydantic models: MediaItem, EpisodeItem, StreamSource, DownloadRecord, UserRecord, UserSettings
 │   ├── parser.py             # Torrentio & generic stream title parser, codecs, HDR, audio, size
 │   ├── magnet.py             # Magnet URI builder, Base32/hex hash normalizer, client dispatch
-│   ├── storage.py            # SQLite schema manager: media cache, stream history, downloads, addons
+│   ├── storage.py            # SQLite schema manager: media cache, stream history, downloads, addons, users
 │   ├── aggregator.py         # Concurrent multi-provider stream querying, deduplication, sorting
 │   ├── providers/
 │   │   ├── base.py           # BaseProvider abstract interface & manifest probe
@@ -41,11 +42,32 @@ The **Media Source Aggregator** is an independent, protocol-compliant Python med
 │   │   ├── http.py           # Chunked HTTP downloader with byte-range resume & SHA-256 validation
 │   │   ├── torrent.py        # Magnet file exporter and external client bridge
 │   │   └── manager.py        # Download lifecycle & SQLite state transition orchestrator
+│   ├── services/
+│   │   ├── media_service.py  # Async business logic for search, metadata, and stream aggregation
+│   │   ├── download_service.py # Async download workers, throttling, cancellation, and restart recovery
+│   │   ├── user_service.py   # Multi-user permissions, first-admin setup, settings persistence
+│   │   └── addon_service.py  # Stremio add-on manifest installation and toggle service
+│   ├── bot/
+│   │   ├── app.py            # Bot factory, dependency injection, and polling lifecycle manager
+│   │   ├── config.py         # Bot configuration and environment variables reader
+│   │   ├── callbacks.py      # Type-safe CallbackData structures for navigation and selection
+│   │   ├── keyboards.py      # Inline keyboard builders (pagination, seasons, streams, admin)
+│   │   ├── middlewares/
+│   │   │   ├── auth.py       # Access restriction, setup wizard trigger, admin pass
+│   │   │   └── rate_limit.py # Anti-flood cooldown rate limiting
+│   │   └── handlers/
+│   │       ├── start.py      # /start, /help, first-time admin setup wizard
+│   │       ├── search.py     # /search, free text input, paginated search results
+│   │       ├── media.py      # Movie details, season picker, episode picker, stream details
+│   │       ├── downloads.py  # Start download, ASCII progress bar, cancel, magnet link
+│   │       ├── settings.py   # Quality cycling, CAM filter toggle, seed thresholds
+│   │       ├── addons.py     # List and toggle active add-ons, add manifest URL
+│   │       └── admin.py      # User approval, system statistics, storage usage
 │   └── cli/
-│       ├── main.py           # Click command-line interface entry point
+│       ├── main.py           # Click command-line interface entry point (includes 'bot' command)
 │       └── ui.py             # Rich formatting: tables, detail panels, progress bars
-├── tests/                    # 49 unit, integration, and regression tests
-├── README.md                 # User guide and CLI examples
+├── tests/                    # 73 unit, integration, and regression tests
+├── README.md                 # User guide, CLI and Telegram Bot reference
 ├── pyproject.toml            # Build configuration and dependencies
 └── PROGRESS.md               # Project handoff and milestone tracking
 ```
@@ -88,7 +110,7 @@ Statuses: `TODO` → `IN PROGRESS` → `IMPLEMENTED` → `VERIFIED` | `BLOCKED`
 | TV Series & Episode Breakdown | **VERIFIED** | HIGH | `test_cinemeta_series_episodes_parsing`; Live `tt0903747` returned 6 seasons, 67 episodes ([`models.EpisodeItem`](file:///root/t.io/media_aggregator/models.py#L58-L68)) |
 | Season/Episode 0 Specials | **VERIFIED** | MEDIUM | `test_cinemeta_season_zero_episode_zero`; Correctly preserves S00E00 without coercing to 1 |
 | Anime Kitsu Catalog Search | **VERIFIED** | MEDIUM | `test_generic_provider_dynamic_search_catalog`; Live query `kitsu-anime-list` returned `kitsu:11` ([`GenericStremioProvider`](file:///root/t.io/media_aggregator/providers/generic.py#L64-L105)) |
-| TMDB / TVDb Metadata Fallback | **TODO** | MEDIUM | Planned fallback metadata provider when IMDb IDs are absent |
+| MediaService Async Discovery | **VERIFIED** | HIGH | `test_media_service.py::test_media_service_search`, `test_media_service_get_details_cache_hit` |
 
 ### 4.2 Stream Resolution & Aggregation
 | Feature | Status | Priority | Supporting Evidence / Source Reference |
@@ -98,9 +120,8 @@ Statuses: `TODO` → `IN PROGRESS` → `IMPLEMENTED` → `VERIFIED` | `BLOCKED`
 | Torrentio Kitsu ID Streams | **VERIFIED** | HIGH | Live query `kitsu:11:1` resolved Naruto torrent sources via Torrentio |
 | Torrentio Config Path Builder | **VERIFIED** | HIGH | `test_torrentio_config_path_builder`; Live query with `providers=yts\|limit=3` returned 1 stream |
 | Generic Stremio Add-on Protocol | **VERIFIED** | HIGH | `test_generic_stremio_provider`; Live inspection of MediaFusion and OpenSubtitles v3 manifests |
-| Debrid Cached Stream Resolution | **IMPLEMENTED** | HIGH | Formats debrid config routes and parses `[RD+]` badges; live stream unlocking requires paid user token (`BLOCKED` for live test) |
 | Multi-Provider Concurrency | **VERIFIED** | HIGH | `test_aggregator.py`; Concurrently queries providers via `ThreadPoolExecutor` ([`aggregator.py`](file:///root/t.io/media_aggregator/aggregator.py#L61-L80)) |
-| Resource Capability Filtering | **VERIFIED** | HIGH | `test_stream_providers_resource_filtering`; Non-stream add-ons (OpenSubtitles, Cinemeta) excluded from stream querying |
+| Resource Capability Filtering | **VERIFIED** | HIGH | `test_stream_providers_resource_filtering`; Non-stream add-ons excluded from stream querying |
 
 ### 4.3 Deduplication & Quality Parsing
 | Feature | Status | Priority | Supporting Evidence / Source Reference |
@@ -123,79 +144,83 @@ Statuses: `TODO` → `IN PROGRESS` → `IMPLEMENTED` → `VERIFIED` | `BLOCKED`
 | Base32 InfoHash Normalization | **VERIFIED** | MEDIUM | `test_clean_info_hash_base32`; Converts 32-char RFC 4648 Base32 infohashes to 40-char lowercase hex |
 | `.magnet` File Export | **VERIFIED** | HIGH | `test_torrent_downloader_export`; Writes `.magnet` files into target download directory |
 | Client Dispatch (Aria2/qBit) | **VERIFIED** | MEDIUM | `test_qbittorrent_dispatch`; Subprocess execution for `aria2c`, `qbittorrent`, `qbittorrent-nox`, `transmission` |
-| Headless Environment Fallback | **VERIFIED** | MEDIUM | When GUI launchers fail in headless Linux, cleanly logs `.magnet` file completion |
-| Native BitTorrent Wire Engine | **TODO** | MEDIUM | In-process torrent peer-wire download engine (libtorrent-python or pure asyncio BitTorrent engine) |
+| DownloadService Async Coordinator | **VERIFIED** | HIGH | `test_download_service.py`; Spawns background worker tasks with throttled callbacks and cancellation |
+| Restart Interruption Recovery | **VERIFIED** | HIGH | `test_download_service.py::test_recover_interrupted_downloads`; Resets orphaned downloading states |
 
-### 4.5 Storage & History
+### 4.5 Storage & Multi-User Architecture
 | Feature | Status | Priority | Supporting Evidence / Source Reference |
 | :--- | :---: | :---: | :--- |
-| SQLite Schema Initialization | **VERIFIED** | HIGH | `test_default_addons_initialization`; Creates tables, seeds default providers ([`StorageManager`](file:///root/t.io/media_aggregator/storage.py#L45-L148)) |
-| Media Metadata Caching | **VERIFIED** | HIGH | `test_media_cache`; Caches full metadata avoiding external network lookups |
-| Stream Discovery Logging | **VERIFIED** | HIGH | `test_stream_history`; Records discovered sources, seeders, sizes, and raw JSON payloads |
-| Download State Management | **VERIFIED** | HIGH | `test_downloads_tracking`; Records progress, speed, status transitions (`PENDING` → `DOWNLOADING` → `COMPLETED`) |
-| Cancellation State Transitions | **VERIFIED** | HIGH | `test_download_manager_cancellation_tracking`; Interrupts transition records to `CANCELLED` |
-| Addon Registry Dynamic Store | **VERIFIED** | HIGH | `test_addons_management`; Add, toggle, delete add-on records in SQLite |
-| Bookmarks Store | **VERIFIED** | LOW | `test_bookmarks`; Add, list, remove media favorites in SQLite |
+| SQLite Schema Migration | **VERIFIED** | HIGH | `test_default_addons_initialization`; Automatic PRAGMA schema check adds `user_id` to downloads and bookmarks |
+| User Profile & Admin Registration | **VERIFIED** | HIGH | `test_user_service.py::test_user_registration_and_retrieval`, `test_claim_first_admin` |
+| Multi-User Download Isolation | **VERIFIED** | HIGH | `test_user_service.py::test_multi_user_isolation`; Downloads scoped strictly by `user_id` |
+| Multi-User Bookmarks Isolation | **VERIFIED** | HIGH | `test_user_service.py::test_multi_user_isolation`; Bookmarks scoped strictly by `user_id` |
+| User Settings Persistence | **VERIFIED** | HIGH | `test_user_service.py::test_user_settings_update`; Stores resolution, min_seeders, and CAM preferences |
+| System Statistics Query | **VERIFIED** | HIGH | `test_bot.py::test_admin_handlers`; Computes active downloads, users, cached media, and stream counts |
 
-### 4.6 User Interface (CLI)
+### 4.6 Telegram Bot Interface (aiogram 3.x)
 | Feature | Status | Priority | Supporting Evidence / Source Reference |
 | :--- | :---: | :---: | :--- |
-| CLI Help & Argument Parsing | **VERIFIED** | HIGH | `test_cli_help`; Click group with 9 commands (`search`, `browse`, `info`, `streams`, `magnet`, `download`, `history`, `addons`, `config-torrentio`) |
-| CLI Search Command | **VERIFIED** | HIGH | `test_cli_search`; Live tested `media-aggregator search "Interstellar"` |
-| CLI Metadata View (`info`) | **VERIFIED** | HIGH | `test_cli_info`; Live tested `media-aggregator info tt0903747 --type series` |
-| CLI Streams Aggregation | **VERIFIED** | HIGH | `test_cli_streams`; Live tested `media-aggregator streams tt0903747 -s 1 -e 1` |
-| CLI Magnet Command | **VERIFIED** | HIGH | `test_cli_magnet`; Live tested `media-aggregator magnet tt0903747 -s 1 -e 1 -i 1` |
-| CLI History View | **VERIFIED** | HIGH | Live verified table output with status formatting and paths |
-| CLI Addon Registry Commands | **VERIFIED** | HIGH | `test_cli_addons`; Live tested `media-aggregator addons add <url>` |
-| CLI Torrentio Configuration | **VERIFIED** | MEDIUM | Live updated provider and sorting options via `config-torrentio` |
-| Terminal User Interface (TUI) | **TODO** | MEDIUM | Full-screen interactive TUI (using Textual or prompt_toolkit) |
+| CLI `bot` Command | **VERIFIED** | HIGH | `media-aggregator bot --help`; CLI command with token, admin ID, and download directory flags |
+| First-Time Setup Wizard | **VERIFIED** | HIGH | `test_bot.py::test_start_and_claim_handlers`; Guides initial user to claim administrative ownership |
+| Authentication Middleware | **VERIFIED** | HIGH | `test_bot.py::test_auth_middleware`; Restricts personal bot to approved users and static admin IDs |
+| Anti-Flood Rate Limiting | **VERIFIED** | HIGH | `test_bot.py::test_rate_limit_middleware`; Enforces interaction cooldowns preventing Telegram 429 limits |
+| Interactive Inline Keyboards | **VERIFIED** | HIGH | `test_bot.py::test_all_keyboards`; Paginated search, season/episode trees, stream badges, and admin controls |
+| Movie & TV Series Search | **VERIFIED** | HIGH | `test_bot.py::test_search_handlers`; `/search` and free text search with rich result cards |
+| Stream Discovery & Details | **VERIFIED** | HIGH | `test_bot.py::test_media_handlers`; Displays quality, file size, seed count, codecs, HDR, audio |
+| Background Download & Progress | **VERIFIED** | HIGH | `test_bot.py::test_downloads_handlers`; Live visual progress bar `[████████░░]` with speed and ETA updates |
+| RFC Magnet URI Telegram Delivery | **VERIFIED** | HIGH | `test_bot.py::test_downloads_handlers`; Generates and sends full clickable Magnet link to chat |
+| Settings Management Handlers | **VERIFIED** | HIGH | `test_bot.py::test_settings_handlers`; In-bot quality resolution cycling and CAM release toggle |
+| Add-on Provider Registry in Bot | **VERIFIED** | HIGH | `test_addon_service.py`; Add-on toggling and manifest URL installation via `/add_addon` |
+| Admin Panel & User Approval | **VERIFIED** | HIGH | `test_bot.py::test_admin_handlers`; Approve pending user access and inspect real-time database metrics |
 
 ---
 
-## 5. Independent Audit Findings & Applied Fixes
-
-During the technical audit, 8 specific defects were identified and fixed:
-
-1. **Downloader State Reset Bug**: `HTTPDownloader._cancel_event` was not cleared in `download_file()`. Fixed in [`http.py`](file:///root/t.io/media_aggregator/downloader/http.py#L50).
-2. **HTTP 416 Stale Part Corruption Bug**: 416 responses blindly renamed potentially corrupt `.part` files. Fixed to validate integrity before renaming; invalid partials are purged. Fixed in [`http.py`](file:///root/t.io/media_aggregator/downloader/http.py#L65-L95).
-3. **Missing `qbittorrent-nox` Dispatch Branch**: Client candidate list contained `qbittorrent-nox` but dispatch rejected it. Fixed in [`magnet.py`](file:///root/t.io/media_aggregator/magnet.py#L136-L140).
-4. **Direct HTTP Stream Debrid Misclassification**: Direct URLs without debrid badges were flagged `is_debrid=True`. Fixed to require genuine provider badge tokens. Fixed in [`parser.py`](file:///root/t.io/media_aggregator/parser.py#L164-L174).
-5. **Futile Querying of Non-Stream Add-ons**: `get_stream_providers()` queried subtitle and catalog-only add-ons. Fixed to enforce `supports_resource("stream")`. Fixed in [`registry.py`](file:///root/t.io/media_aggregator/providers/registry.py#L58-L64).
-6. **Hardcoded Search Catalog Path**: `GenericStremioProvider` hardcoded `/top/`, breaking add-ons with custom catalog IDs (e.g., Anime Kitsu). Fixed via dynamic catalog ID resolution. Fixed in [`generic.py`](file:///root/t.io/media_aggregator/providers/generic.py#L64-L105).
-7. **Season 0 / Episode 0 Coercion**: Null checks coerced index `0` to `1`. Fixed in [`cinemeta.py`](file:///root/t.io/media_aggregator/providers/cinemeta.py#L50-L68).
-8. **Orphaned `DOWNLOADING` State on Interrupt**: Cancelling via `Ctrl+C` left database records stuck in `DOWNLOADING`. Fixed to transition to `CANCELLED`. Fixed in [`manager.py`](file:///root/t.io/media_aggregator/downloader/manager.py#L102-L115).
-
----
-
-## 6. Test Suite & Coverage Status
+## 5. Test Suite & Coverage Status
 
 ### Coverage Summary
 ```text
-Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.17.0
-Total Tests: 49 passed / 0 failed in 8.07s
-Overall Statement Coverage: 76% (1,597 statements, 391 missed)
+Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.17.0, pytest-asyncio-1.4.1
+Total Tests: 73 passed / 0 failed in 26.46s
+Overall Statement Coverage: 75% (2,809 statements, 702 missed)
 ```
 
 ### Module Breakdown
 - `media_aggregator/__init__.py`: 100%
+- `media_aggregator/bot/__init__.py`: 100%
+- `media_aggregator/bot/callbacks.py`: 100%
+- `media_aggregator/bot/middlewares/__init__.py`: 100%
+- `media_aggregator/services/__init__.py`: 100%
 - `media_aggregator/models.py`: 99%
-- `media_aggregator/storage.py`: 98%
+- `media_aggregator/services/user_service.py`: 98%
+- `media_aggregator/storage.py`: 96%
+- `media_aggregator/bot/middlewares/rate_limit.py`: 96%
 - `media_aggregator/parser.py`: 92%
 - `media_aggregator/providers/torrentio.py`: 90%
+- `media_aggregator/bot/keyboards.py`: 90%
+- `media_aggregator/aggregator.py`: 86%
+- `media_aggregator/bot/middlewares/auth.py`: 85%
+- `media_aggregator/bot/handlers/settings.py`: 84%
 - `media_aggregator/downloader/manager.py`: 82%
 - `media_aggregator/magnet.py`: 81%
+- `media_aggregator/services/media_service.py`: 81%
+- `media_aggregator/services/addon_service.py`: 80%
 - `media_aggregator/providers/base.py`: 79%
 - `media_aggregator/downloader/http.py`: 77%
-- `media_aggregator/aggregator.py`: 72%
+- `media_aggregator/services/download_service.py`: 76%
+- `media_aggregator/bot/handlers/admin.py`: 75%
+- `media_aggregator/bot/handlers/start.py`: 75%
+- `media_aggregator/bot/handlers/search.py`: 68%
 - `media_aggregator/providers/cinemeta.py`: 68%
 - `media_aggregator/cli/ui.py`: 60%
+- `media_aggregator/bot/config.py`: 58%
 - `media_aggregator/providers/registry.py`: 54%
-- `media_aggregator/cli/main.py`: 54%
+- `media_aggregator/cli/main.py`: 51%
+- `media_aggregator/bot/handlers/downloads.py`: 45%
 - `media_aggregator/providers/generic.py`: 42%
 
 ---
 
-## 7. Known Issues & Limitations
+## 6. Known Issues & Limitations
 
 1. **Debrid Service Live Unlocking**: Link unlocking via RealDebrid, AllDebrid, or TorBox requires a paid user API key. URL route construction and badge parsing are implemented, but live stream resolution requires valid credentials.
 2. **Headless Linux Environments**: On servers lacking an active X11/Wayland display server or desktop session, `xdg-open` cannot launch external desktop applications. The application detects this and safely falls back to saving the `.magnet` file.
@@ -203,10 +228,10 @@ Overall Statement Coverage: 76% (1,597 statements, 391 missed)
 
 ---
 
-## 8. Remaining Tasks & Future Milestones
+## 7. Remaining Tasks & Future Milestones
 
 ### High Priority
-- [ ] **Interactive TUI Interface**: Build a terminal user interface using `textual` or `prompt_toolkit` to allow arrow-key navigation through catalogs, search results, and stream quality tiers.
+- [ ] **Interactive TUI Interface**: Build a terminal user interface using `textual` or `prompt_toolkit` to allow arrow-key navigation in terminal environments without Telegram.
 - [ ] **RealDebrid / Debrid Live Integration Test**: Test real link unlocking with a user-provided debrid API token.
 
 ### Medium Priority
@@ -220,25 +245,28 @@ Overall Statement Coverage: 76% (1,597 statements, 391 missed)
 
 ---
 
-## 9. Agent Handoff Guide
+## 8. Agent Handoff Guide
 
 ### Current Project State
-The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0, CLI entry points `media-aggregator` and `msa`). All 49 automated tests pass with zero warnings. All live endpoints (Cinemeta, Torrentio, Anime Kitsu) respond and parse correctly.
+The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 73 automated tests pass with zero warnings (75% coverage across 2,809 statements).
 
 ### Critical Files to Know
-- **Core Aggregator**: [`media_aggregator/aggregator.py`](file:///root/t.io/media_aggregator/aggregator.py) (concurrency & deduplication logic)
-- **Torrentio Provider**: [`media_aggregator/providers/torrentio.py`](file:///root/t.io/media_aggregator/providers/torrentio.py) (config serialization & stream fetching)
-- **Cinemeta Provider**: [`media_aggregator/providers/cinemeta.py`](file:///root/t.io/media_aggregator/providers/cinemeta.py) (catalog search & episode metadata)
-- **HTTP Downloader**: [`media_aggregator/downloader/http.py`](file:///root/t.io/media_aggregator/downloader/http.py) (range resume & SHA-256 validation)
-- **Magnet Handler**: [`media_aggregator/magnet.py`](file:///root/t.io/media_aggregator/magnet.py) (URI generation & client dispatch)
-- **CLI Commands**: [`media_aggregator/cli/main.py`](file:///root/t.io/media_aggregator/cli/main.py) (Click CLI interface)
+- **Telegram Bot Runner**: [`media_aggregator/bot/app.py`](file:///root/t.io/media_aggregator/bot/app.py) (aiogram dispatcher, dependency injection, lifecycle)
+- **Bot Handlers**: [`media_aggregator/bot/handlers/`](file:///root/t.io/media_aggregator/bot/handlers/) (start, search, media, downloads, settings, addons, admin)
+- **Inline Keyboards**: [`media_aggregator/bot/keyboards.py`](file:///root/t.io/media_aggregator/bot/keyboards.py) (navigation, streams, pagination, admin)
+- **Application Services**: [`media_aggregator/services/`](file:///root/t.io/media_aggregator/services/) (media, download, user, addon services)
+- **Core Aggregator**: [`media_aggregator/aggregator.py`](file:///root/t.io/media_aggregator/aggregator.py) (concurrency & deduplication)
+- **Storage Layer**: [`media_aggregator/storage.py`](file:///root/t.io/media_aggregator/storage.py) (SQLite schema, users, downloads, cache)
 
-### Verified Test Suite
-Run tests at any time with:
+### Verification Commands
 ```bash
+# Run complete test suite with coverage report
 pytest -v --cov=media_aggregator tests/
-```
 
-### Exact Recommended Next Task
-**Build the Interactive TUI Interface (`media_aggregator/tui/`)**:
-Create an interactive terminal UI (using Textual or prompt_toolkit) that allows users to launch `media-aggregator tui`, search with live auto-completion, browse poster artwork/metadata, and select streams with arrow keys.
+# Test CLI bot help
+media-aggregator bot --help
+
+# Test CLI search and streams
+media-aggregator search "Interstellar"
+media-aggregator streams tt0816692
+```

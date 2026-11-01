@@ -46,6 +46,7 @@ class DownloadManager:
         media_title: str,
         progress_callback: Optional[Callable[[DownloadRecord], None]] = None,
         custom_filename: Optional[str] = None,
+        user_id: int = 0,
     ) -> DownloadRecord:
         """Download or dispatch an aggregated stream source."""
         clean_title = sanitize_filename(media_title)
@@ -70,6 +71,7 @@ class DownloadManager:
                 source_type=SourceType.HTTP,
                 target_url=stream.url,
                 local_path=str(dest_file),
+                user_id=user_id,
             )
             self.storage.update_download(rec_id, status=DownloadStatus.DOWNLOADING)
 
@@ -132,6 +134,7 @@ class DownloadManager:
                 source_type=SourceType.TORRENT,
                 target_url=magnet_uri,
                 local_path=str(magnet_file),
+                user_id=user_id,
             )
 
             # Try to dispatch to client if available
@@ -160,7 +163,8 @@ class DownloadManager:
     def list_history(
         self,
         status: Optional[DownloadStatus] = None,
+        user_id: Optional[int] = None,
         limit: int = 50,
     ) -> List[DownloadRecord]:
         """Get past download records."""
-        return self.storage.get_downloads(status=status, limit=limit)
+        return self.storage.get_downloads(status=status, user_id=user_id, limit=limit)

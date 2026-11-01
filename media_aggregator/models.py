@@ -139,6 +139,7 @@ class StreamSource(BaseModel):
 class DownloadRecord(BaseModel):
     """Represents a local download history record."""
     id: Optional[int] = None
+    user_id: int = 0
     media_id: str
     media_title: str
     source_type: SourceType = SourceType.HTTP
@@ -153,6 +154,31 @@ class DownloadRecord(BaseModel):
     error_message: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
+
+
+class UserSettings(BaseModel):
+    """User-specific preference configurations."""
+    preferred_quality: str = "1080p"
+    min_seeders: int = 1
+    max_size_gb: float = 15.0
+    exclude_cam: bool = True
+    sort_by: str = "quality_size"
+    debrid_provider: Optional[str] = None
+    debrid_api_key: Optional[str] = None
+    download_dir: Optional[str] = None
+    notifications_enabled: bool = True
+
+
+class UserRecord(BaseModel):
+    """Represents a registered Telegram user."""
+    user_id: int
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    is_admin: bool = False
+    is_allowed: bool = False
+    settings: UserSettings = Field(default_factory=UserSettings)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_active_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class AddonManifest(BaseModel):

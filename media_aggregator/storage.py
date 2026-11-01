@@ -18,6 +18,8 @@ from media_aggregator.models import (
     MediaType,
     SourceType,
     StreamSource,
+    UserRecord,
+    UserSettings,
 )
 
 DEFAULT_DB_DIR = Path.home() / ".media_aggregator"
@@ -93,6 +95,7 @@ class StorageManager:
                 """
                 CREATE TABLE IF NOT EXISTS downloads (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER DEFAULT 0,
                     media_id TEXT NOT NULL,
                     media_title TEXT NOT NULL,
                     source_type TEXT NOT NULL,
@@ -135,10 +138,38 @@ class StorageManager:
                     type TEXT NOT NULL,
                     year TEXT,
                     poster TEXT,
+                    user_id INTEGER DEFAULT 0,
                     saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
+
+            # Users table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id INTEGER PRIMARY KEY,
+                    username TEXT,
+                    full_name TEXT,
+                    is_admin INTEGER DEFAULT 0,
+                    is_allowed INTEGER DEFAULT 0,
+                    settings_json TEXT DEFAULT '{}',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
+            # Schema migrations for existing databases
+            cursor.execute("PRAGMA table_info(downloads)")
+            columns_dl = [row["name"] for row in cursor.fetchall()]
+            if "user_id" not in columns_dl:
+                cursor.execute("ALTER TABLE downloads ADD COLUMN user_id INTEGER DEFAULT 0")
+
+            cursor.execute("PRAGMA table_info(bookmarks)")
+            columns_bm = [row["name"] for row in cursor.fetchall()]
+            if "user_id" not in columns_bm:
+                cursor.execute("ALTER TABLE bookmarks ADD COLUMN user_id INTEGER DEFAULT 0")
 
             conn.commit()
 
@@ -305,16 +336,17 @@ class StorageManager:
         source_type: SourceType,
         target_url: str,
         local_path: Optional[str] = None,
+        user_id: int = 0,
     ) -> int:
         """Create a new download record."""
         with self._get_connection() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO downloads (
-                    media_id, media_title, source_type, target_url, local_path, status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    user_id, media_id, media_title, source_type, target_url, local_path, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
-                (media_id, media_title, source_type.value, target_url, local_path, DownloadStatus.PENDING.value),
+                (user_id, media_id, media_title, source_type.value, target_url, local_path, DownloadStatus.PENDING.value),
             )
             conn.commit()
             return cursor.lastrowid
@@ -374,37 +406,49 @@ class StorageManager:
             conn.commit()
 
     def get_downloads(
-        self, status: Optional[DownloadStatus] = None, limit: int = 50
+        self,
+        status: Optional[DownloadStatus] = None,
+        user_id: Optional[int] = None,
+        limit: int = 50,
     ) -> List[DownloadRecord]:
         """Fetch list of downloads."""
         with self._get_connection() as conn:
+            query = "SELECT * FROM downloads"
+            conditions = []
+            params = []
             if status:
-                cursor = conn.execute(
-                    "SELECT * FROM downloads WHERE status = ? ORDER BY created_at DESC LIMIT ?",
-                    (status.value, limit),
-                )
-            else:
-                cursor = conn.execute("SELECT * FROM downloads ORDER BY created_at DESC LIMIT ?", (limit,))
+                conditions.append("status = ?")
+                params.append(status.value)
+            if user_id is not None:
+                conditions.append("user_id = ?")
+                params.append(user_id)
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            query += " ORDER BY created_at DESC LIMIT ?"
+            params.append(limit)
 
+            cursor = conn.execute(query, params)
             records = []
             for row in cursor.fetchall():
+                row_dict = dict(row)
                 records.append(
                     DownloadRecord(
-                        id=row["id"],
-                        media_id=row["media_id"],
-                        media_title=row["media_title"],
-                        source_type=SourceType(row["source_type"]),
-                        target_url=row["target_url"],
-                        local_path=row["local_path"],
-                        status=DownloadStatus(row["status"]),
-                        total_bytes=row["total_bytes"] or 0,
-                        downloaded_bytes=row["downloaded_bytes"] or 0,
-                        progress_percent=row["progress_percent"] or 0.0,
-                        speed_bps=row["speed_bps"] or 0.0,
-                        eta_seconds=row["eta_seconds"],
-                        error_message=row["error_message"],
-                        created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc),
-                        completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+                        id=row_dict["id"],
+                        user_id=row_dict.get("user_id") or 0,
+                        media_id=row_dict["media_id"],
+                        media_title=row_dict["media_title"],
+                        source_type=SourceType(row_dict["source_type"]),
+                        target_url=row_dict["target_url"],
+                        local_path=row_dict["local_path"],
+                        status=DownloadStatus(row_dict["status"]),
+                        total_bytes=row_dict["total_bytes"] or 0,
+                        downloaded_bytes=row_dict["downloaded_bytes"] or 0,
+                        progress_percent=row_dict["progress_percent"] or 0.0,
+                        speed_bps=row_dict["speed_bps"] or 0.0,
+                        eta_seconds=row_dict["eta_seconds"],
+                        error_message=row_dict["error_message"],
+                        created_at=datetime.fromisoformat(row_dict["created_at"]) if row_dict["created_at"] else datetime.now(timezone.utc),
+                        completed_at=datetime.fromisoformat(row_dict["completed_at"]) if row_dict["completed_at"] else None,
                     )
                 )
             return records
@@ -415,22 +459,24 @@ class StorageManager:
             row = conn.execute("SELECT * FROM downloads WHERE id = ?", (download_id,)).fetchone()
             if not row:
                 return None
+            row_dict = dict(row)
             return DownloadRecord(
-                id=row["id"],
-                media_id=row["media_id"],
-                media_title=row["media_title"],
-                source_type=SourceType(row["source_type"]),
-                target_url=row["target_url"],
-                local_path=row["local_path"],
-                status=DownloadStatus(row["status"]),
-                total_bytes=row["total_bytes"] or 0,
-                downloaded_bytes=row["downloaded_bytes"] or 0,
-                progress_percent=row["progress_percent"] or 0.0,
-                speed_bps=row["speed_bps"] or 0.0,
-                eta_seconds=row["eta_seconds"],
-                error_message=row["error_message"],
-                created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc),
-                completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+                id=row_dict["id"],
+                user_id=row_dict.get("user_id") or 0,
+                media_id=row_dict["media_id"],
+                media_title=row_dict["media_title"],
+                source_type=SourceType(row_dict["source_type"]),
+                target_url=row_dict["target_url"],
+                local_path=row_dict["local_path"],
+                status=DownloadStatus(row_dict["status"]),
+                total_bytes=row_dict["total_bytes"] or 0,
+                downloaded_bytes=row_dict["downloaded_bytes"] or 0,
+                progress_percent=row_dict["progress_percent"] or 0.0,
+                speed_bps=row_dict["speed_bps"] or 0.0,
+                eta_seconds=row_dict["eta_seconds"],
+                error_message=row_dict["error_message"],
+                created_at=datetime.fromisoformat(row_dict["created_at"]) if row_dict["created_at"] else datetime.now(timezone.utc),
+                completed_at=datetime.fromisoformat(row_dict["completed_at"]) if row_dict["completed_at"] else None,
             )
 
     def delete_download(self, download_id: int) -> bool:
@@ -502,27 +548,190 @@ class StorageManager:
 
     # --- Bookmarks ---
 
-    def add_bookmark(self, item: MediaItem) -> None:
+    def add_bookmark(self, item: MediaItem, user_id: int = 0) -> None:
         """Bookmark a movie or series for quick access."""
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO bookmarks (media_id, title, type, year, poster, saved_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT OR REPLACE INTO bookmarks (media_id, title, type, year, poster, user_id, saved_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
-                (item.id, item.title, item.type.value, item.year, item.poster),
+                (item.id, item.title, item.type.value, item.year, item.poster, user_id),
             )
             conn.commit()
 
-    def remove_bookmark(self, media_id: str) -> bool:
+    def remove_bookmark(self, media_id: str, user_id: Optional[int] = None) -> bool:
         """Remove a bookmark."""
         with self._get_connection() as conn:
-            cursor = conn.execute("DELETE FROM bookmarks WHERE media_id = ?", (media_id,))
+            if user_id is not None:
+                cursor = conn.execute("DELETE FROM bookmarks WHERE media_id = ? AND user_id = ?", (media_id, user_id))
+            else:
+                cursor = conn.execute("DELETE FROM bookmarks WHERE media_id = ?", (media_id,))
             conn.commit()
             return cursor.rowcount > 0
 
-    def get_bookmarks(self) -> List[Dict[str, Any]]:
-        """List all bookmarks."""
+    def get_bookmarks(self, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """List bookmarks."""
         with self._get_connection() as conn:
-            cursor = conn.execute("SELECT * FROM bookmarks ORDER BY saved_at DESC")
+            if user_id is not None:
+                cursor = conn.execute("SELECT * FROM bookmarks WHERE user_id = ? ORDER BY saved_at DESC", (user_id,))
+            else:
+                cursor = conn.execute("SELECT * FROM bookmarks ORDER BY saved_at DESC")
             return [dict(row) for row in cursor.fetchall()]
+
+    # --- User Management ---
+
+    def get_or_create_user(
+        self,
+        user_id: int,
+        username: Optional[str] = None,
+        full_name: Optional[str] = None,
+        is_admin: bool = False,
+        is_allowed: bool = False,
+    ) -> UserRecord:
+        """Retrieve existing user or register a new user."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            if row:
+                # Update username, full_name, and last_active_at if changed
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET username = COALESCE(?, username),
+                        full_name = COALESCE(?, full_name),
+                        last_active_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                    """,
+                    (username, full_name, user_id),
+                )
+                conn.commit()
+                updated_row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+                return self._row_to_user(updated_row)
+
+            # Insert new user
+            settings = UserSettings()
+            conn.execute(
+                """
+                INSERT INTO users (user_id, username, full_name, is_admin, is_allowed, settings_json, created_at, last_active_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                (
+                    user_id,
+                    username,
+                    full_name,
+                    1 if is_admin else 0,
+                    1 if is_allowed else 0,
+                    settings.model_dump_json(),
+                ),
+            )
+            conn.commit()
+            new_row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            return self._row_to_user(new_row)
+
+    def get_user(self, user_id: int) -> Optional[UserRecord]:
+        """Fetch a user record by user_id."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_user(row)
+
+    def update_user_activity(self, user_id: int) -> None:
+        """Update last_active_at timestamp for user."""
+        with self._get_connection() as conn:
+            conn.execute("UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE user_id = ?", (user_id,))
+            conn.commit()
+
+    def update_user_settings(self, user_id: int, settings: UserSettings | Dict[str, Any]) -> None:
+        """Update user preferences."""
+        if isinstance(settings, UserSettings):
+            settings_json = settings.model_dump_json()
+        else:
+            settings_json = json.dumps(settings)
+
+        with self._get_connection() as conn:
+            conn.execute("UPDATE users SET settings_json = ? WHERE user_id = ?", (settings_json, user_id))
+            conn.commit()
+
+    def set_user_allowed(self, user_id: int, is_allowed: bool) -> bool:
+        """Authorize or revoke user access."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("UPDATE users SET is_allowed = ? WHERE user_id = ?", (1 if is_allowed else 0, user_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def set_user_admin(self, user_id: int, is_admin: bool) -> bool:
+        """Promote or demote user admin status."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE users SET is_admin = ?, is_allowed = CASE WHEN ? = 1 THEN 1 ELSE is_allowed END WHERE user_id = ?",
+                (1 if is_admin else 0, 1 if is_admin else 0, user_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def list_users(self, allowed_only: bool = False) -> List[UserRecord]:
+        """List registered users."""
+        with self._get_connection() as conn:
+            query = "SELECT * FROM users"
+            if allowed_only:
+                query += " WHERE is_allowed = 1"
+            query += " ORDER BY created_at DESC"
+            cursor = conn.execute(query)
+            return [self._row_to_user(row) for row in cursor.fetchall()]
+
+    def count_admins(self) -> int:
+        """Count how many users currently have is_admin = 1."""
+        with self._get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) as count FROM users WHERE is_admin = 1")
+            return cursor.fetchone()["count"]
+
+    def get_system_stats(self) -> Dict[str, Any]:
+        """Return system statistics for admin dashboard."""
+        with self._get_connection() as conn:
+            cached_media = conn.execute("SELECT COUNT(*) as c FROM media_cache").fetchone()["c"]
+            discovered_streams = conn.execute("SELECT COUNT(*) as c FROM stream_history").fetchone()["c"]
+            total_downloads = conn.execute("SELECT COUNT(*) as c FROM downloads").fetchone()["c"]
+            active_downloads = conn.execute(
+                "SELECT COUNT(*) as c FROM downloads WHERE status = ?",
+                (DownloadStatus.DOWNLOADING.value,),
+            ).fetchone()["c"]
+            completed_downloads = conn.execute(
+                "SELECT COUNT(*) as c FROM downloads WHERE status = ?",
+                (DownloadStatus.COMPLETED.value,),
+            ).fetchone()["c"]
+            failed_downloads = conn.execute(
+                "SELECT COUNT(*) as c FROM downloads WHERE status = ?",
+                (DownloadStatus.FAILED.value,),
+            ).fetchone()["c"]
+            total_users = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
+            allowed_users = conn.execute("SELECT COUNT(*) as c FROM users WHERE is_allowed = 1").fetchone()["c"]
+            active_addons = conn.execute("SELECT COUNT(*) as c FROM addons WHERE enabled = 1").fetchone()["c"]
+
+            return {
+                "cached_media": cached_media,
+                "discovered_streams": discovered_streams,
+                "total_downloads": total_downloads,
+                "active_downloads": active_downloads,
+                "completed_downloads": completed_downloads,
+                "failed_downloads": failed_downloads,
+                "total_users": total_users,
+                "allowed_users": allowed_users,
+                "active_addons": active_addons,
+            }
+
+    @staticmethod
+    def _row_to_user(row: sqlite3.Row) -> UserRecord:
+        """Convert a database row to a UserRecord."""
+        raw_settings = json.loads(row["settings_json"] or "{}")
+        settings = UserSettings(**raw_settings)
+        return UserRecord(
+            user_id=row["user_id"],
+            username=row["username"],
+            full_name=row["full_name"],
+            is_admin=bool(row["is_admin"]),
+            is_allowed=bool(row["is_allowed"]),
+            settings=settings,
+            created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc),
+            last_active_at=datetime.fromisoformat(row["last_active_at"]) if row["last_active_at"] else datetime.now(timezone.utc),
+        )

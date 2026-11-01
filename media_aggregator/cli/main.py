@@ -448,6 +448,44 @@ def config_torrentio_cmd(
     console.print("[bold green]✓ Successfully updated Torrentio configuration.[/bold green]")
 
 
+@cli.command("bot")
+@click.option("--token", help="Telegram Bot Token (or set TELEGRAM_BOT_TOKEN).")
+@click.option("--admin", type=int, help="Initial Telegram Administrator User ID.")
+@click.option("--download-dir", help="Directory for storing downloaded media files.")
+def bot_cmd(
+    token: Optional[str],
+    admin: Optional[int],
+    download_dir: Optional[str],
+) -> None:
+    """🤖 Launch the Media Aggregator Telegram Bot."""
+    import asyncio
+    from media_aggregator.bot.app import run_bot
+    from media_aggregator.bot.config import BotConfig
+
+    cfg = BotConfig.from_env(token=token, admin_id=admin, download_dir=download_dir)
+    if not cfg.bot_token:
+        console.print(
+            "[bold red]Error:[/bold red] No Telegram Bot Token specified.\n"
+            "Provide --token or set the [bold]TELEGRAM_BOT_TOKEN[/bold] environment variable."
+        )
+        raise click.Abort()
+
+    console.print("[bold cyan]Starting Media Aggregator Telegram Bot...[/bold cyan]")
+    if cfg.admin_ids:
+        console.print(f"[green]Configured Admins:[/green] {cfg.admin_ids}")
+    else:
+        console.print("[yellow]No admins pre-configured. First-time setup wizard will activate on /start.[/yellow]")
+    console.print(f"[green]Download Directory:[/green] {cfg.download_dir}")
+
+    try:
+        asyncio.run(run_bot(cfg))
+    except (KeyboardInterrupt, SystemExit):
+        console.print("\n[yellow]Bot stopped by user.[/yellow]")
+    except Exception as e:
+        console.print(f"[bold red]Bot encountered fatal error:[/bold red] {e}")
+        raise click.Abort()
+
+
 def main() -> None:
     cli()
 

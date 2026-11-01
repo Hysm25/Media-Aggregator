@@ -13,8 +13,9 @@ An independent, extensible Python media aggregator inspired by Torrentio and the
 - **Resilient Downloader Engine**:
   - **HTTP/HTTPS**: Chunked streaming downloader with byte-range resume (`Range: bytes=X-`), speed tracking, ETA calculation, and SHA-256 verification.
   - **BitTorrent / Magnet**: RFC-compliant Magnet URI construction with high-speed public tracker pools, BEP-53 selective file indices (`so=X`), `.magnet` file export, and local client dispatch (`aria2c`, `transmission-remote`, `qbittorrent`, `xdg-open`).
-- **Persistent Local Records**: Embedded SQLite database (`~/.media_aggregator/data.db`) storing media metadata cache, discovered stream history, download history, and provider configurations.
+- **Persistent Local Records & Multi-User Support**: Embedded SQLite database (`~/.media_aggregator/data.db`) storing media metadata cache, discovered stream history, download jobs, registered users, and provider configurations with user-level isolation.
 - **Interactive CLI & Rich Formatting**: Terminal interface built with Click and Rich, displaying colored tables, details panels, and progress bars.
+- **Telegram Bot Interface (aiogram 3.x)**: Full-featured asynchronous Telegram Bot interface with inline navigation keyboards, movie/series search, season and episode browsing, live download progress bars, background workers, restart recovery, rate-limiting, and an admin dashboard.
 
 ---
 
@@ -178,6 +179,43 @@ media-aggregator addons toggle anime-kitsu --disable
 media-aggregator config-torrentio --providers "yts,1337x,rarbg" --sort seeders
 ```
 
+### 9. Launch Telegram Bot
+```bash
+# Launch bot with explicit token and admin ID
+media-aggregator bot --token "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" --admin 123456789
+
+# Or run using environment variables
+export TELEGRAM_BOT_TOKEN="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+export TELEGRAM_ADMIN_IDS="123456789"
+media-aggregator bot
+```
+
+---
+
+## 🤖 Telegram Bot Interface
+
+The Media Aggregator Telegram Bot transforms the CLI tool into a private, multi-user media streaming and downloading assistant.
+
+### Features
+- **Interactive Inline Navigation**: Paginated search results, season and episode pickers, stream quality selectors, and detailed media cards.
+- **Background Downloader**: Non-blocking chunked HTTP downloading with rate-throttled visual progress bars (`[████████░░] 45.2%`) and ETA updates.
+- **Magnet Dispatch**: View clickable RFC Magnet links or receive `.magnet` files directly in Telegram.
+- **First-Time Setup Wizard**: If no administrator is configured, the first user to message `/start` is guided to claim administrative ownership.
+- **User Authorization & Isolation**: Operates by default in personal mode. Unapproved users are queued for administrator authorization (`/admin`). All bookmarks, downloads, and search settings are strictly isolated per user.
+- **Download Persistence Across Restarts**: Interrupted downloads from bot restarts are gracefully recovered and marked in SQLite.
+- **Anti-Flood Rate Limiting**: Enforces request cooldowns to prevent hitting Telegram API rate limits.
+
+### Bot Commands
+| Command | Description |
+| :--- | :--- |
+| `/start` | Launch main navigation menu or run first-time setup wizard |
+| `/search <title>` | Search movies and TV series across Stremio catalogs |
+| `/downloads` | View active downloads, progress bars, and historical jobs |
+| `/settings` | Customize preferred resolution (4K/1080p), min seeds, and CAM filters |
+| `/addons` | Manage and toggle Stremio add-on providers |
+| `/admin` | Administrator panel for approving users and viewing system metrics |
+| `/help` | Detailed bot guide and usage examples |
+
 ---
 
 ## 🐍 Python API Usage
@@ -223,7 +261,7 @@ Run the test suite with coverage:
 pytest -v --cov=media_aggregator tests/
 ```
 
-All 49 unit, integration, and regression tests verify:
+All 73 unit, integration, and regression tests verify:
 - Stream title and codec parsing
 - Base32 and hex infohash normalization
 - Magnet link generation and parsing
@@ -231,6 +269,9 @@ All 49 unit, integration, and regression tests verify:
 - HTTP chunked range download and SHA-256 validation
 - SQLite caching, stream tracking, and download state persistence
 - CLI subcommands and Rich table presentations
+- Telegram bot configuration, callbacks, inline keyboards, and middlewares
+- Application services (MediaService, DownloadService, UserService, AddonService)
+- First-time setup wizard, user permissions, and multi-user isolation
 
 ---
 
