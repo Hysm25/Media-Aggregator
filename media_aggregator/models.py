@@ -162,7 +162,7 @@ class UserSettings(BaseModel):
     """User-specific preference configurations."""
     preferred_quality: str = "1080p"
     min_seeders: int = 1
-    max_size_gb: float = 15.0
+    max_size_gb: Optional[float] = None
     exclude_cam: bool = True
     sort_by: str = "quality_size"
     debrid_provider: Optional[str] = None

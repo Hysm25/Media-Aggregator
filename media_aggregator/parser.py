@@ -126,8 +126,22 @@ def parse_torrentio_stream(raw: Dict[str, Any], provider_name: str = "Torrentio"
     title = raw.get("title", "")
     info_hash = raw.get("infoHash")
     file_idx = raw.get("fileIdx")
-    url = raw.get("url")
+    url = raw.get("url") or raw.get("externalUrl")
     behavior_hints = raw.get("behaviorHints", {})
+
+    # Check for direct magnet link in url or externalUrl if info_hash is missing
+    if not info_hash and url and url.startswith("magnet:?"):
+        from media_aggregator.magnet import parse_magnet_link
+        parsed_magnet = parse_magnet_link(url)
+        if parsed_magnet and parsed_magnet.get("info_hash"):
+            info_hash = parsed_magnet["info_hash"]
+            if file_idx is None and parsed_magnet.get("file_idx") is not None:
+                file_idx = parsed_magnet["file_idx"]
+
+    # Normalize infoHash to standard 40-char lowercase hex
+    if info_hash:
+        from media_aggregator.magnet import clean_info_hash
+        info_hash = clean_info_hash(info_hash)
 
     lines = [line.strip() for line in title.split("\n") if line.strip()]
     release_title = lines[0] if lines else name

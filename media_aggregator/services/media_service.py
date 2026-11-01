@@ -30,6 +30,21 @@ class MediaService:
         self.registry = registry or ProviderRegistry(self.storage)
         self.aggregator = StreamAggregator()
         self._search_cache: Dict[str, Tuple[float, List[MediaItem]]] = {}
+        self._stream_cache: Dict[str, Tuple[float, List[StreamSource]]] = {}
+
+    def has_cached_streams(
+        self,
+        media_id: str,
+        season: Optional[int] = None,
+        episode: Optional[int] = None,
+    ) -> bool:
+        """Check if streams for target media are already available in memory cache."""
+        cache_key = f"{media_id}:{season or 0}:{episode or 0}"
+        if cache_key in self._stream_cache:
+            ts, _ = self._stream_cache[cache_key]
+            if time.time() - ts < 300.0:
+                return True
+        return False
 
     async def search(self, query: str, media_type: Optional[MediaType] = None) -> List[MediaItem]:
         """Search movies and TV series across active providers asynchronously with global relevance ranking."""
@@ -135,6 +150,28 @@ class MediaService:
             if cached and cached.type == MediaType.SERIES:
                 media_type = MediaType.SERIES
 
+        cache_key = f"{media_id}:{season or 0}:{episode or 0}"
+        now = time.time()
+
+        def _apply_filters_and_sort(streams_to_filter: List[StreamSource]) -> List[StreamSource]:
+            min_seeds = settings.min_seeders if settings and settings.min_seeders is not None else 1
+            exclude_cam = settings.exclude_cam if settings and settings.exclude_cam is not None else True
+            max_size = (settings.max_size_gb * 1024 * 1024 * 1024) if (settings and settings.max_size_gb and settings.max_size_gb > 0) else None
+            sort_by = settings.sort_by if settings and settings.sort_by else "quality_size"
+
+            filtered = self.aggregator.filter_streams(
+                streams=streams_to_filter,
+                min_seeders=min_seeds,
+                exclude_cam=exclude_cam,
+                max_size_bytes=int(max_size) if max_size else None,
+            )
+            return self.aggregator.sort_streams(filtered, sort_by=sort_by)
+
+        if cache_key in self._stream_cache:
+            ts, cached_raw = self._stream_cache[cache_key]
+            if now - ts < 300.0:  # 5 minutes TTL
+                return _apply_filters_and_sort(cached_raw)
+
         providers = self.registry.get_stream_providers(media_type=media_type, media_id=media_id)
         if not providers:
             return []
@@ -148,22 +185,12 @@ class MediaService:
                 episode=episode,
             )
 
+            # Update in-memory stream cache
+            self._stream_cache[cache_key] = (time.time(), raw_streams)
+
             # Record in SQLite history
             self.storage.record_stream_sources(media_id, raw_streams)
 
-            # Apply user preferences if provided
-            min_seeds = settings.min_seeders if settings else 1
-            exclude_cam = settings.exclude_cam if settings else True
-            max_size = (settings.max_size_gb * 1024 * 1024 * 1024) if settings and settings.max_size_gb else None
-            sort_by = settings.sort_by if settings else "quality_size"
-
-            filtered = self.aggregator.filter_streams(
-                streams=raw_streams,
-                min_seeders=min_seeds,
-                exclude_cam=exclude_cam,
-                max_size_bytes=int(max_size) if max_size else None,
-            )
-
-            return self.aggregator.sort_streams(filtered, sort_by=sort_by)
+            return _apply_filters_and_sort(raw_streams)
 
         return await asyncio.to_thread(_aggregate)

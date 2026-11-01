@@ -257,7 +257,7 @@ def streams_keyboard(
     page: int = 0,
     page_size: int = 5,
 ) -> InlineKeyboardMarkup:
-    """Build list of available stream sources."""
+    """Build paginated list of available stream sources with clear navigation."""
     total_pages = max(1, math.ceil(len(streams) / page_size))
     page = max(0, min(page, total_pages - 1))
     slice_items = streams[page * page_size : (page + 1) * page_size]
@@ -268,19 +268,59 @@ def streams_keyboard(
         res = s.resolution or "HD"
         size = s.size_display or "N/A"
         seeds = f"👤{s.seeders}" if s.seeders is not None else ""
-        badge = f"[{res} | {size} {seeds} | {s.provider[:8]}]"
+        type_icon = "🧲" if s.is_torrent else "🌐"
+        prov = s.indexer or s.provider[:10]
+        label = f"{i + 1}. {type_icon} [{res} | {size} | {seeds} | {prov}]"
+        if len(label) > 52:
+            label = label[:49] + "]"
         buttons.append([
             InlineKeyboardButton(
-                text=badge,
+                text=label,
                 callback_data=StreamCallback(
                     id=media_id,
                     season=season,
                     episode=episode,
                     idx=idx,
                     action="view",
+                    page=page,
                 ).pack(),
             )
         ])
+
+    # Pagination navigation controls
+    if total_pages > 1:
+        nav_row: List[InlineKeyboardButton] = []
+        if page > 0:
+            nav_row.append(
+                InlineKeyboardButton(
+                    text="◀️ Prev",
+                    callback_data=EpisodeCallback(
+                        id=media_id,
+                        season=season,
+                        episode=episode,
+                        page=page - 1,
+                    ).pack(),
+                )
+            )
+        nav_row.append(
+            InlineKeyboardButton(
+                text=f"📄 {page + 1}/{total_pages}",
+                callback_data=NavCallback(action="noop").pack(),
+            )
+        )
+        if page < total_pages - 1:
+            nav_row.append(
+                InlineKeyboardButton(
+                    text="Next ▶️",
+                    callback_data=EpisodeCallback(
+                        id=media_id,
+                        season=season,
+                        episode=episode,
+                        page=page + 1,
+                    ).pack(),
+                )
+            )
+        buttons.append(nav_row)
 
     back_cb = SeasonCallback(id=media_id, season=season).pack() if season > 0 else MediaCallback(id=media_id, action="view").pack()
     buttons.append([
@@ -296,6 +336,7 @@ def stream_action_keyboard(
     season: int = 0,
     episode: int = 0,
     stream_idx: int = 0,
+    page: int = 0,
 ) -> InlineKeyboardMarkup:
     """Build action buttons for a single selected stream."""
     buttons = [
@@ -308,6 +349,7 @@ def stream_action_keyboard(
                     episode=episode,
                     idx=stream_idx,
                     action="dl",
+                    page=page,
                 ).pack(),
             )
         ]
@@ -323,6 +365,7 @@ def stream_action_keyboard(
                     episode=episode,
                     idx=stream_idx,
                     action="magnet",
+                    page=page,
                 ).pack(),
             )
         ])
@@ -330,7 +373,12 @@ def stream_action_keyboard(
     buttons.append([
         InlineKeyboardButton(
             text="🔙 Back to Streams",
-            callback_data=EpisodeCallback(id=media_id, season=season, episode=episode).pack(),
+            callback_data=EpisodeCallback(
+                id=media_id,
+                season=season,
+                episode=episode,
+                page=page,
+            ).pack(),
         ),
         InlineKeyboardButton(text="🏠 Home", callback_data=NavCallback(action="home").pack()),
     ])

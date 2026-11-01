@@ -32,7 +32,7 @@ def clean_info_hash(raw_hash: str) -> str:
         return raw
     
     # Check if Base32 (32 characters, uppercase/lowercase RFC 4648)
-    clean_b32 = raw.upper()
+    clean_b32 = raw.upper().rstrip("=")
     if len(clean_b32) == 32:
         try:
             decoded = base64.b32decode(clean_b32)

@@ -1,8 +1,8 @@
 # Project Progress: Media Source Aggregator & Telegram Bot
 
-**Current Local Time**: 2026-11-01T15:15:00Z  
+**Current Local Time**: 2026-11-01T15:50:00Z  
 **Repository Commit**: `master`  
-**Test Suite Status**: 114 Passed / 0 Failed (75% Coverage across 3,570 statements)  
+**Test Suite Status**: 123 Passed / 0 Failed (74% Coverage across 3,717 statements)  
 **Package Version**: 1.0.0  
 
 ---
@@ -241,6 +241,20 @@ Features are classified under strict audit rules:
 | **RFC Magnet URI Construction from Live Streams** | **VERIFIED** | `LIVE VERIFIED` | Live stream infohashes converted to valid Magnet URIs: `magnet:?xt=urn:btih:1b42b99b9fbc0e0416a379787f250eb73b7434e3...` with trackers. |
 | **RealDebrid Live Stream Unlocking** | **BLOCKED** | `BLOCKED` | Unlocking torrent streams via RealDebrid requires an active paid API key (`RD_API_KEY`). Protocol serialization is verified; live stream playback is blocked without user credentials. |
 
+### 4.11 Torrentio Sources & Stream Results Upgrade
+| Feature | Status | Priority | Supporting Evidence / Source Reference |
+| :--- | :---: | :---: | :--- |
+| All 25 Torrentio Scrapers | **VERIFIED** | HIGH | `test_torrentio_all_25_providers_configuration`; Enabled all 25 official scrapers (`yts`, `eztv`, `rarbg`, `1337x`, `ext`, `thepiratebay`, `kickasstorrents`, `torrentgalaxy`, `magnetdl`, `horriblesubs`, `nyaasi`, `tokyotosho`, `anidex`, `nekobt`, `rutor`, `rutracker`, `comando`, `bludv`, `micoleaodublado`, `torrent9`, `ilcorsaronero`, `mejortorrent`, `wolfmax4k`, `cinecalidad`, `besttorrents`) ([`TorrentioProvider`](file:///root/t.io/media_aggregator/providers/torrentio.py#L13-L50)) |
+| User URL Config Extraction | **VERIFIED** | HIGH | `test_torrentio_all_25_providers_configuration`; Custom user configuration paths embedded in `base_url` (e.g. `providers=...\|sort=...`) are parsed and preserved without overwrite |
+| Stream Pagination UI (5 per page) | **VERIFIED** | HIGH | `test_more_than_five_valid_magnet_results_and_pagination`, `test_telegram_ui_stream_pagination_flow`; Added `◀️ Prev`, `📄 X/Y`, `Next ▶️` navigation buttons in Telegram stream list ([`streams_keyboard`](file:///root/t.io/media_aggregator/bot/keyboards.py#L140-L210)) |
+| In-Memory Stream Caching | **VERIFIED** | HIGH | `MediaService._stream_cache`; 5-minute stream cache delivers instantaneous pagination navigation without repeated provider HTTP requests ([`media_service.py`](file:///root/t.io/media_aggregator/services/media_service.py#L25-L160)) |
+| Multi-File Torrent Pack Deduplication | **VERIFIED** | HIGH | `test_duplicate_and_distinct_releases_multi_file_packs`; Deduplication keyed on `(norm_hash, file_idx)` prevents discarding distinct episodes/files within the same torrent release ([`aggregator.py`](file:///root/t.io/media_aggregator/aggregator.py#L95-L135)) |
+| Uncapped Default File Size | **VERIFIED** | HIGH | `UserSettings.max_size_gb` changed from 15.0 GB default to `None`, ensuring 4K UHD Remux releases (50–90 GB) are not discarded unexpectedly ([`models.py`](file:///root/t.io/media_aggregator/models.py#L140-L155)) |
+| Base32 Padding Stripping | **VERIFIED** | HIGH | `test_clean_info_hash_base32`, `test_stream_pipeline_missing_and_invalid_infohashes`; Normalizes 32-char Base32 hashes with trailing `=` padding to 40-char lowercase hex ([`magnet.py`](file:///root/t.io/media_aggregator/magnet.py#L22-L42)) |
+| Missing InfoHash Magnet Fallback | **VERIFIED** | HIGH | `test_stream_pipeline_missing_and_invalid_infohashes`; Parses direct `magnet:?xt=urn:btih:...` links from `externalUrl` or `url` when `infoHash` property is omitted ([`parser.py`](file:///root/t.io/media_aggregator/parser.py#L75-L95)) |
+| Page-Aware Return Navigation | **VERIFIED** | HIGH | `EpisodeCallback` and `StreamCallback` carry `page: int = 0`; returning from a stream detail card restores the exact page the user was inspecting ([`callbacks.py`](file:///root/t.io/media_aggregator/bot/callbacks.py#L20-L40)) |
+| Live Torrentio Count vs Display | **VERIFIED** | HIGH | `test_live_torrentio_api_vs_displayed_count`; Live Breaking Bad S01E01 returns 77 streams from Torrentio; all 76 valid torrent streams retained and accessible across 16 pages |
+
 ---
 
 ## 5. Test Suite & Coverage Status
@@ -248,8 +262,8 @@ Features are classified under strict audit rules:
 ### Coverage Summary
 ```text
 Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.1.0, pytest-asyncio-1.4.1
-Total Tests: 114 passed / 0 failed in 34.78s
-Overall Statement Coverage: 75% (3,570 statements, 894 missed)
+Total Tests: 123 passed / 0 failed in 40.24s
+Overall Statement Coverage: 74% (3,717 statements, 952 missed)
 ```
 
 ### Module Breakdown
@@ -322,7 +336,7 @@ Overall Statement Coverage: 75% (3,570 statements, 894 missed)
 ## 8. Agent Handoff Guide
 
 ### Current Project State
-The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 114 automated tests pass with zero warnings (75% coverage across 3,570 statements), with both mock tests and live external network integrations passing. Multi-tier search ranking (`media_aggregator/search.py`) provides mathematical immunity for exact title matches over partial matches, tolerates typos, extracts year hints, routes media types, promotes provider diversity on page 1, and merges duplicate records. Live endpoints for Cinemeta (`v3-cinemeta.strem.io`) and Torrentio (`torrentio.strem.fun`) have been verified for movies, TV series, episode breakdowns, stream resolution, and Magnet link generation. Telegram presentation features Stremio-like visual media cards (`media_aggregator/bot/ui_utils.py`) displaying actual posters above formatted metadata with 1-tap stream discovery. Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
+The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 123 automated tests pass with zero warnings (74% coverage across 3,717 statements), with both mock tests and live external network integrations passing. Multi-tier search ranking (`media_aggregator/search.py`) provides mathematical immunity for exact title matches over partial matches, tolerates typos, extracts year hints, routes media types, promotes provider diversity on page 1, and merges duplicate records. Stream discovery supports all 25 official Torrentio scrapers, preserves embedded user configurations, deduplicates multi-file release packs by file index, and provides complete pagination (`◀️ Prev`, `📄 X/Y`, `Next ▶️`) with a 5-minute memory cache in the Telegram UI. Live endpoints for Cinemeta (`v3-cinemeta.strem.io`) and Torrentio (`torrentio.strem.fun`) have been verified for movies, TV series, episode breakdowns, stream resolution, and Magnet link generation. Telegram presentation features Stremio-like visual media cards (`media_aggregator/bot/ui_utils.py`) displaying actual posters above formatted metadata with 1-tap stream discovery. Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
 
 ### Critical Files to Know
 - **Search & Ranking Engine**: [`media_aggregator/search.py`](file:///root/t.io/media_aggregator/search.py) (scoring, fuzzy matching, query parsing, deduplication)

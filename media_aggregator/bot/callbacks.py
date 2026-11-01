@@ -29,10 +29,11 @@ class SeasonCallback(CallbackData, prefix="sn"):
 
 
 class EpisodeCallback(CallbackData, prefix="ep"):
-    """Episode selection callback."""
+    """Episode selection and stream pagination callback."""
     id: str
     season: int
     episode: int
+    page: int = 0
 
 
 class StreamCallback(CallbackData, prefix="st"):
@@ -42,6 +43,7 @@ class StreamCallback(CallbackData, prefix="st"):
     episode: int
     idx: int
     action: str = "view"  # view, dl, magnet
+    page: int = 0
 
 
 class DownloadCallback(CallbackData, prefix="dl"):

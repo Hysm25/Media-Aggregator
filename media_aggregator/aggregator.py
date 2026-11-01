@@ -97,15 +97,16 @@ class StreamAggregator:
         unique_results: List[StreamSource] = []
 
         for s in streams:
-            # 1. Deduplication by InfoHash (for torrents)
+            # 1. Deduplication by InfoHash and file index (for torrents)
             if s.info_hash:
                 norm_hash = s.info_hash.lower()
-                if norm_hash in hash_map:
-                    existing = hash_map[norm_hash]
+                dedup_key = f"{norm_hash}:{s.file_idx}" if s.file_idx is not None else norm_hash
+                if dedup_key in hash_map:
+                    existing = hash_map[dedup_key]
                     self._merge_stream_data(existing, s)
                     continue
                 else:
-                    hash_map[norm_hash] = s
+                    hash_map[dedup_key] = s
                     unique_results.append(s)
                     continue
 

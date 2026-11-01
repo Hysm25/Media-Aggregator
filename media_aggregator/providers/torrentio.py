@@ -11,18 +11,35 @@ from media_aggregator.providers.base import BaseProvider
 
 logger = logging.getLogger("media_aggregator.providers.torrentio")
 
-DEFAULT_TORRENTIO_PROVIDERS = [
+ALL_TORRENTIO_PROVIDERS = [
     "yts",
     "eztv",
     "rarbg",
     "1337x",
+    "ext",
     "thepiratebay",
     "kickasstorrents",
     "torrentgalaxy",
     "magnetdl",
+    "horriblesubs",
     "nyaasi",
     "tokyotosho",
+    "anidex",
+    "nekobt",
+    "rutor",
+    "rutracker",
+    "comando",
+    "bludv",
+    "micoleaodublado",
+    "torrent9",
+    "ilcorsaronero",
+    "mejortorrent",
+    "wolfmax4k",
+    "cinecalidad",
+    "besttorrents",
 ]
+
+DEFAULT_TORRENTIO_PROVIDERS = ALL_TORRENTIO_PROVIDERS
 
 
 class TorrentioProvider(BaseProvider):
@@ -41,7 +58,18 @@ class TorrentioProvider(BaseProvider):
         debrid_options: Optional[List[str]] = None,
         custom_config_path: Optional[str] = None,
     ):
-        super().__init__(name="Torrentio", base_url=base_url, timeout=timeout)
+        # Extract existing configuration path from base_url if present
+        parsed_url = urllib.parse.urlparse(base_url.rstrip("/"))
+        path = parsed_url.path.strip("/")
+        effective_custom_config = custom_config_path
+        if path and path != "manifest.json" and not path.endswith(".json"):
+            root_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            super().__init__(name="Torrentio", base_url=root_url, timeout=timeout)
+            if not effective_custom_config:
+                effective_custom_config = path
+        else:
+            super().__init__(name="Torrentio", base_url=base_url, timeout=timeout)
+
         self.providers = providers
         self.sort = sort
         self.quality_filter = quality_filter
@@ -49,7 +77,7 @@ class TorrentioProvider(BaseProvider):
         self.debrid_provider = debrid_provider
         self.debrid_api_key = debrid_api_key
         self.debrid_options = debrid_options
-        self.custom_config_path = custom_config_path
+        self.custom_config_path = effective_custom_config
 
         # Pre-seed default manifest conforming to Stremio protocol
         self._manifest = AddonManifest(

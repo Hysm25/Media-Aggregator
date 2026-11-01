@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import List
 from aiogram import F, Router, types
 from media_aggregator.bot.callbacks import (
@@ -156,7 +157,7 @@ async def handle_episode_streams(
     media_service: MediaService,
     user_record: UserRecord,
 ) -> None:
-    """Aggregate and present stream sources for a movie or TV episode."""
+    """Aggregate and present stream sources for a movie or TV episode with pagination."""
     item = await media_service.get_details(callback_data.id)
     raw_title = item.title if item else callback_data.id
     safe_title = escape_markdown(raw_title)
@@ -164,14 +165,15 @@ async def handle_episode_streams(
     is_series = (item and item.type == MediaType.SERIES) or callback_data.season > 0 or callback_data.episode > 0
     ep_str = f" S{callback_data.season:02d}E{callback_data.episode:02d}" if (callback_data.season > 0 or callback_data.episode > 0) else ""
 
-    if callback.message:
+    season_arg = callback_data.season if is_series else None
+    episode_arg = callback_data.episode if is_series else None
+
+    # Only show loading message on initial uncached query to prevent pagination flicker
+    if callback_data.page == 0 and callback.message and not media_service.has_cached_streams(callback_data.id, season_arg, episode_arg):
         await safe_edit_or_replace_message(
             message=callback.message,
             text=f"⚡ Resolving streaming sources for **{safe_title}**{ep_str}...\nQuerying Torrentio and active providers...",
         )
-
-    season_arg = callback_data.season if is_series else None
-    episode_arg = callback_data.episode if is_series else None
 
     try:
         streams = await media_service.get_streams(
@@ -191,17 +193,47 @@ async def handle_episode_streams(
                 text=f"❌ No active stream sources found for **{safe_title}**{ep_str}.\nTry adjusting your settings or verifying active add-ons.",
                 reply_markup=media_detail_keyboard(item, is_bookmarked=False) if item else None,
             )
+        await callback.answer()
         return
+
+    page_size = 5
+    total_pages = max(1, math.ceil(len(streams) / page_size))
+    curr_page = max(0, min(callback_data.page, total_pages - 1))
+    slice_items = streams[curr_page * page_size : (curr_page + 1) * page_size]
+
+    start_num = curr_page * page_size + 1
+    end_num = min(len(streams), (curr_page + 1) * page_size)
+
+    lines = [
+        f"⚡ Found **{len(streams)}** stream sources for **{safe_title}**{ep_str}",
+        f"📄 Page **{curr_page + 1}/{total_pages}** (Streams {start_num}–{end_num}):\n",
+    ]
+    for i, s in enumerate(slice_items):
+        stream_num = curr_page * page_size + i + 1
+        icon = "🧲" if s.is_torrent else "🌐"
+        res = s.resolution or "HD"
+        size = s.size_display or "Unknown"
+        seeds = f" | 👤 {s.seeders}" if s.seeders is not None else ""
+        rel_name = s.release_title or s.title or "Unknown Release"
+        if len(rel_name) > 55:
+            rel_name = rel_name[:52] + "..."
+        prov = s.indexer or s.provider
+        lines.append(f"**{stream_num}.** {icon} `[{res}]` {escape_markdown(rel_name)}")
+        lines.append(f"     💾 {size}{seeds} • ⚙️ {escape_markdown(prov)}")
+
+    lines.append("\nSelect a source to inspect details, copy Magnet, or start downloading:")
 
     if callback.message:
         await safe_edit_or_replace_message(
             message=callback.message,
-            text=f"⚡ Found **{len(streams)}** stream sources for **{safe_title}**{ep_str}:\nSelect a source to inspect details or start downloading:",
+            text="\n".join(lines),
             reply_markup=streams_keyboard(
                 media_id=callback_data.id,
                 streams=streams,
                 season=callback_data.season,
                 episode=callback_data.episode,
+                page=curr_page,
+                page_size=page_size,
             ),
         )
     await callback.answer()
@@ -234,15 +266,22 @@ async def handle_stream_detail_view(
     title = stream.release_title or stream.title or "Media Stream"
     safe_title = escape_markdown(title)
 
+    source_type_str = "🧲 BitTorrent (Magnet Available)" if stream.is_torrent else "🌐 Direct HTTP"
+    if stream.is_debrid:
+        source_type_str = "⚡ Debrid Cloud Stream"
+
     lines = [
         "⚡ **Stream Source Information**\n",
         f"📦 **Release**: `{safe_title}`",
+        f"📡 **Source Type**: {source_type_str}",
         f"📊 **Resolution**: {stream.resolution}",
         f"💾 **Size**: {stream.size_display or 'Unknown'}",
         f"⚙️ **Provider**: {escape_markdown(stream.provider)}",
     ]
     if stream.seeders is not None:
         lines.append(f"👤 **Seeders**: {stream.seeders}")
+    if stream.info_hash:
+        lines.append(f"🔑 **InfoHash**: `{stream.info_hash}`")
     if stream.codecs:
         lines.append(f"🎞️ **Codecs**: {', '.join(stream.codecs)}")
     if stream.hdr:
@@ -259,6 +298,7 @@ async def handle_stream_detail_view(
         season=callback_data.season,
         episode=callback_data.episode,
         stream_idx=callback_data.idx,
+        page=callback_data.page,
     )
 
     if callback.message:

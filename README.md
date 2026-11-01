@@ -83,11 +83,11 @@ Torrentio serializes user configuration directly into its URL path before the st
 https://torrentio.strem.fun/{configPath}/stream/{type}/{id}.json
 ```
 Where `{configPath}` is pipe-delimited (`|`):
-- `providers=yts,eztv,rarbg,1337x,thepiratebay,torrentgalaxy,magnetdl,nyaasi`
-- `sort=qualitysize` | `seeders` | `size`
+- `providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt,rutor,rutracker,comando,bludv,micoleaodublado,torrent9,ilcorsaronero,mejortorrent,wolfmax4k,cinecalidad,besttorrents` (supports all 25 official scrapers)
+- `sort=qualitysize` | `quality` | `seeders` | `size`
 - `qualityfilter=4k,1080p,720p,480p,scr,cam`
-- `limit=5`
-- `realdebrid=API_KEY` | `alldebrid=API_KEY` | `torbox=API_KEY`
+- `limit=X` (max streams per quality, omitted by default for full stream sets)
+- `realdebrid=API_KEY` | `alldebrid=API_KEY` | `torbox=API_KEY` | `debridlink=API_KEY` | `premiumize=API_KEY`
 
 ---
 
@@ -95,8 +95,8 @@ Where `{configPath}` is pipe-delimited (`|`):
 
 ```bash
 # Clone the repository
-git clone https://github.com/example/media-source-aggregator.git
-cd media-source-aggregator
+git clone https://github.com/Hysm25/Media-Aggregator.git
+cd Media-Aggregator
 
 # Install in editable mode
 pip install -e .
