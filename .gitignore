@@ -1,9 +1,10 @@
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 *.egg-info/
 dist/
@@ -11,3 +12,7 @@ build/
 *.part
 *.magnet
 *.db
+.env
+.venv
+env/
+venv/

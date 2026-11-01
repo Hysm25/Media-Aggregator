@@ -1,3 +1,0 @@
-[console_scripts]
-media-aggregator = media_aggregator.cli.main:main
-msa = media_aggregator.cli.main:main
