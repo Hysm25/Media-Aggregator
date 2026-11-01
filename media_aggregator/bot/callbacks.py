@@ -42,7 +42,18 @@ class StreamCallback(CallbackData, prefix="st"):
     season: int
     episode: int
     idx: int
-    action: str = "view"  # view, dl, magnet
+    action: str = "view"  # view, dl, magnet, magnet_file
+    page: int = 0
+
+
+class SubtitleCallback(CallbackData, prefix="sub"):
+    """Subtitle track selection and delivery callback."""
+    id: str
+    season: int = 0
+    episode: int = 0
+    stream_idx: int = 0
+    sub_idx: int = 0
+    action: str = "list"  # "list", "get"
     page: int = 0
 
 

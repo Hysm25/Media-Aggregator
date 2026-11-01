@@ -4,7 +4,88 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict, List, Optional, Tuple
-from media_aggregator.models import Quality, SourceType, StreamSource
+from media_aggregator.models import Quality, SourceType, StreamSource, SubtitleTrack
+
+LANGUAGE_NAMES: Dict[str, str] = {
+    "en": "English", "eng": "English",
+    "es": "Spanish", "spa": "Spanish",
+    "fr": "French", "fre": "French", "fra": "French",
+    "de": "German", "ger": "German", "deu": "German",
+    "it": "Italian", "ita": "Italian",
+    "pt": "Portuguese", "por": "Portuguese",
+    "ru": "Russian", "rus": "Russian",
+    "ja": "Japanese", "jpn": "Japanese",
+    "ko": "Korean", "kor": "Korean",
+    "zh": "Chinese", "chi": "Chinese", "zho": "Chinese",
+    "ar": "Arabic", "ara": "Arabic",
+    "hi": "Hindi", "hin": "Hindi",
+    "tr": "Turkish", "tur": "Turkish",
+    "pl": "Polish", "pol": "Polish",
+    "nl": "Dutch", "dut": "Dutch", "nld": "Dutch",
+    "sv": "Swedish", "swe": "Swedish",
+    "no": "Norwegian", "nor": "Norwegian",
+    "fi": "Finnish", "fin": "Finnish",
+    "da": "Danish", "dan": "Danish",
+    "el": "Greek", "gre": "Greek", "ell": "Greek",
+    "he": "Hebrew", "heb": "Hebrew",
+    "id": "Indonesian", "ind": "Indonesian",
+    "vi": "Vietnamese", "vie": "Vietnamese",
+    "th": "Thai", "tha": "Thai",
+    "uk": "Ukrainian", "ukr": "Ukrainian",
+    "cs": "Czech", "ces": "Czech", "cze": "Czech",
+    "hu": "Hungarian", "hun": "Hungarian",
+    "ro": "Romanian", "ron": "Romanian", "rum": "Romanian",
+    "bg": "Bulgarian", "bul": "Bulgarian",
+    "fa": "Persian", "fas": "Persian", "per": "Persian",
+}
+
+
+def normalize_language_code(code: str) -> str:
+    """Map ISO language code (e.g. 'eng', 'es', 'fre') to human-readable language name."""
+    if not code:
+        return "Unknown"
+    cleaned = code.strip().lower()
+    return LANGUAGE_NAMES.get(cleaned, cleaned.capitalize())
+
+
+def parse_subtitles(raw_subs: Any) -> List[SubtitleTrack]:
+    """Parse raw Stremio subtitle array into SubtitleTrack models."""
+    if not isinstance(raw_subs, list):
+        return []
+
+    parsed: List[SubtitleTrack] = []
+    for s in raw_subs:
+        if not isinstance(s, dict):
+            continue
+        url = s.get("url")
+        if not url or not isinstance(url, str):
+            continue
+        url = url.strip()
+        if not (url.startswith("http://") or url.startswith("https://")):
+            continue
+
+        raw_lang = str(s.get("lang") or s.get("language") or "und").strip()
+        sub_id = str(s.get("id") or f"{raw_lang}_{len(parsed)}")
+        label = s.get("label") or s.get("name")
+
+        u_lower = url.lower()
+        if ".srt" in u_lower:
+            fmt = "srt"
+        elif ".vtt" in u_lower:
+            fmt = "vtt"
+        else:
+            fmt = "vtt"
+
+        parsed.append(
+            SubtitleTrack(
+                id=sub_id,
+                url=url,
+                lang=raw_lang,
+                format=fmt,
+                label=str(label) if label else None,
+            )
+        )
+    return parsed
 
 
 def parse_size_to_bytes(size_str: Optional[str]) -> Optional[int]:
@@ -203,6 +284,8 @@ def parse_torrentio_stream(raw: Dict[str, Any], provider_name: str = "Torrentio"
 
     stream_id = info_hash or url or f"{release_title}_{file_idx}"
 
+    subtitles = parse_subtitles(raw.get("subtitles"))
+
     return StreamSource(
         id=str(stream_id),
         provider=provider_name,
@@ -224,6 +307,7 @@ def parse_torrentio_stream(raw: Dict[str, Any], provider_name: str = "Torrentio"
         audio=audio,
         hdr=hdr,
         languages=languages,
+        subtitles=subtitles,
         behavior_hints=behavior_hints,
         trackers=trackers,
         is_debrid=is_debrid,
@@ -285,6 +369,8 @@ def parse_generic_stream(raw: Dict[str, Any], provider_name: str) -> StreamSourc
 
     stream_id = info_hash or url or f"{title}_{file_idx}"
 
+    subtitles = parse_subtitles(raw.get("subtitles"))
+
     return StreamSource(
         id=str(stream_id),
         provider=provider_name,
@@ -303,6 +389,7 @@ def parse_generic_stream(raw: Dict[str, Any], provider_name: str) -> StreamSourc
         codecs=codecs,
         audio=audio,
         hdr=hdr,
+        subtitles=subtitles,
         behavior_hints=behavior_hints,
         trackers=trackers,
     )

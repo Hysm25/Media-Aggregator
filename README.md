@@ -249,6 +249,13 @@ The Telegram bot strictly uses external torrent client delivery for downloads:
 - **Direct HTTP Distinction**: Direct HTTP streams are clearly marked as stream-only and cannot be downloaded directly in Telegram.
 - **Shared Downloader Preservation**: The Python download engine (`HTTPDownloader`, `DownloadManager`, byte-range resume, SHA-256 validation) remains fully available for CLI operations outside Telegram.
 
+### Subtitle Support & External Playback Delivery
+- **Subtitle Track Extraction**: Extracts and validates subtitle arrays from stream responses (`vtt` and `srt` formats).
+- **Language Normalization**: Normalizes ISO 639-1 and 639-2 language codes into standardized human-readable names (e.g., `eng` ➔ `English`, `spa` ➔ `Spanish`, `fre`/`fra` ➔ `French`).
+- **Telegram Document Delivery**: Downloads verified subtitle files and delivers them directly as `.vtt` or `.srt` Telegram documents (`types.BufferedInputFile`) with clear loading instructions for external players (VLC, MX Player).
+- **Direct Subtitle URLs & Fallback**: Provides direct external streaming URLs and handles unreachable/broken remote subtitle URLs gracefully without crashing.
+- **Ecological Distinction**: Clarifies that torrent scrapers (like Torrentio) do not bundle external subtitles with infohashes, while Magnet links do not automatically attach external subtitle tracks.
+
 ### Cinemeta Artwork & Media Cards
 - **High-Quality Portrait Posters**: Automatically upgrades low-resolution thumbnails (e.g. Amazon `_V1_SX250.jpg` crops) to full 800px+ high-res masters and Metahub medium/large portraits.
 - **Landscape Backdrop Art**: Dedicated `🖼️ View Backdrop` action allows users to inspect official cinematic background artwork without replacing portrait posters.
@@ -310,7 +317,7 @@ Run the test suite with coverage:
 pytest -v --cov=media_aggregator tests/
 ```
 
-All 136 unit, integration, and regression tests verify:
+All 147 unit, integration, and regression tests verify:
 - Stream title and codec parsing
 - Base32 and hex infohash normalization
 - Magnet link generation, extraction from `externalUrl`, and parsing

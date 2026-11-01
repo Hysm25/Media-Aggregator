@@ -91,6 +91,25 @@ class MediaItem(BaseModel):
         return self.year if self.year else "N/A"
 
 
+class SubtitleTrack(BaseModel):
+    """Represents an external subtitle track for a stream."""
+    id: str
+    url: str
+    lang: str
+    format: str = "vtt"  # "vtt" or "srt"
+    label: Optional[str] = None
+
+    @property
+    def display_name(self) -> str:
+        """Return human-readable language label and format."""
+        from media_aggregator.parser import normalize_language_code
+        lang_name = normalize_language_code(self.lang)
+        fmt = self.format.upper()
+        if self.label and self.label.strip() and self.label != self.lang:
+            return f"{lang_name} ({self.label}) [.{fmt.lower()}]"
+        return f"{lang_name} [.{fmt.lower()}]"
+
+
 class StreamSource(BaseModel):
     """Represents an aggregated stream/download source."""
     id: str
@@ -113,6 +132,7 @@ class StreamSource(BaseModel):
     audio: List[str] = Field(default_factory=list)
     hdr: List[str] = Field(default_factory=list)
     languages: List[str] = Field(default_factory=list)
+    subtitles: List[SubtitleTrack] = Field(default_factory=list)
     behavior_hints: Dict[str, Any] = Field(default_factory=dict)
     trackers: List[str] = Field(default_factory=list)
     is_debrid: bool = False

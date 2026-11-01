@@ -11,6 +11,7 @@ from media_aggregator.bot.callbacks import (
     MediaCallback,
     SeasonCallback,
     StreamCallback,
+    SubtitleCallback,
 )
 from media_aggregator.bot.keyboards import (
     episodes_keyboard,
@@ -18,6 +19,7 @@ from media_aggregator.bot.keyboards import (
     seasons_keyboard,
     stream_action_keyboard,
     streams_keyboard,
+    subtitles_list_keyboard,
 )
 from media_aggregator.bot.ui_utils import (
     escape_markdown,
@@ -348,3 +350,142 @@ async def handle_stream_detail_view(
             reply_markup=keyboard,
         )
     await callback.answer()
+
+
+@router.callback_query(SubtitleCallback.filter(F.action == "list"))
+async def handle_subtitles_list(
+    callback: types.CallbackQuery,
+    callback_data: SubtitleCallback,
+    media_service: MediaService,
+    user_record: UserRecord,
+) -> None:
+    """Display available external subtitle tracks for the selected stream."""
+    is_series = callback_data.season > 0 or callback_data.episode > 0
+    season_arg = callback_data.season if is_series else None
+    episode_arg = callback_data.episode if is_series else None
+
+    streams = await media_service.get_streams(
+        media_id=callback_data.id,
+        season=season_arg,
+        episode=episode_arg,
+        settings=user_record.settings,
+    )
+
+    if not streams or callback_data.stream_idx >= len(streams):
+        await callback.answer("Stream no longer available.", show_alert=True)
+        return
+
+    stream = streams[callback_data.stream_idx]
+    if not stream.subtitles:
+        await callback.answer("No external subtitle tracks available for this stream.", show_alert=True)
+        return
+
+    rel_name = stream.release_title or stream.title or "Selected Stream"
+    safe_title = escape_markdown(rel_name)
+    sub_count = len(stream.subtitles)
+
+    lines = [
+        "💬 **External Subtitle Tracks**\n",
+        f"🎬 **Release**: `{safe_title}`",
+        f"Found **{sub_count}** subtitle track{'s' if sub_count > 1 else ''}.\n",
+        "Select a track to receive the subtitle file (.srt/.vtt) or download link:",
+    ]
+    caption = "\n".join(lines)
+    keyboard = subtitles_list_keyboard(
+        media_id=callback_data.id,
+        subtitles=stream.subtitles,
+        season=callback_data.season,
+        episode=callback_data.episode,
+        stream_idx=callback_data.stream_idx,
+        page=callback_data.page,
+    )
+
+    if callback.message:
+        await safe_edit_or_replace_message(
+            message=callback.message,
+            text=caption,
+            reply_markup=keyboard,
+        )
+    await callback.answer()
+
+
+@router.callback_query(SubtitleCallback.filter(F.action == "get"))
+async def handle_subtitle_get(
+    callback: types.CallbackQuery,
+    callback_data: SubtitleCallback,
+    media_service: MediaService,
+    user_record: UserRecord,
+) -> None:
+    """Deliver the selected subtitle track as a Telegram document with player loading instructions."""
+    is_series = callback_data.season > 0 or callback_data.episode > 0
+    season_arg = callback_data.season if is_series else None
+    episode_arg = callback_data.episode if is_series else None
+
+    streams = await media_service.get_streams(
+        media_id=callback_data.id,
+        season=season_arg,
+        episode=episode_arg,
+        settings=user_record.settings,
+    )
+
+    if not streams or callback_data.stream_idx >= len(streams):
+        await callback.answer("Stream no longer available.", show_alert=True)
+        return
+
+    stream = streams[callback_data.stream_idx]
+    if not stream.subtitles or callback_data.sub_idx >= len(stream.subtitles):
+        await callback.answer("Subtitle track not found.", show_alert=True)
+        return
+
+    sub = stream.subtitles[callback_data.sub_idx]
+    item = await media_service.get_details(callback_data.id)
+    base_title = item.title if item else callback_data.id
+    if is_series:
+        base_title = f"{base_title}_S{callback_data.season:02d}E{callback_data.episode:02d}"
+
+    clean_base = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in base_title)
+    fmt = sub.format.lower()
+    filename = f"{clean_base}_{sub.lang}.{fmt}"
+
+    # Fetch subtitle file content
+    sub_bytes = None
+    download_error = None
+    try:
+        import urllib.request
+        req = urllib.request.Request(sub.url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            sub_bytes = resp.read()
+    except Exception as e:
+        download_error = str(e)
+        logger.warning(f"Failed to fetch subtitle from {sub.url}: {e}")
+
+    if sub_bytes and callback.message:
+        doc = types.BufferedInputFile(sub_bytes, filename=filename)
+        caption = (
+            f"💬 **Subtitle File Delivered**: `{filename}`\n\n"
+            f"🌐 **Language**: {sub.display_name}\n"
+            f"🔗 **Direct URL**: `{sub.url}`\n\n"
+            f"💡 **Playback Instructions**:\n"
+            f"• **External player (VLC / MX Player)**: In playback controls, tap **Subtitles** ➔ **Add subtitle track** and choose `{filename}`.\n"
+            f"• Or save `{filename}` into the same folder as your media video file with the identical base filename."
+        )
+        await callback.message.answer_document(
+            document=doc,
+            caption=caption,
+            parse_mode="Markdown",
+        )
+        await callback.answer(f"💬 {sub.display_name} sent!")
+    else:
+        # Fallback if download failed
+        if callback.message:
+            msg_text = (
+                f"💬 **Subtitle Track**: {sub.display_name}\n\n"
+                f"🔗 **Direct URL**: {sub.url}\n\n"
+            )
+            if download_error:
+                msg_text += f"⚠️ *Remote subtitle server returned an error ({escape_markdown(download_error)}). Please access the direct URL above.*"
+            await callback.message.answer(
+                text=msg_text,
+                parse_mode="Markdown",
+            )
+        await callback.answer("Subtitle link delivered!", show_alert=bool(download_error))

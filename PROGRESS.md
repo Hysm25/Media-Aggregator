@@ -1,8 +1,8 @@
 # Project Progress: Media Source Aggregator & Telegram Bot
 
-**Current Local Time**: 2026-11-01T17:28:00Z  
+**Current Local Time**: 2026-11-01T23:38:00Z  
 **Repository Commit**: `master`  
-**Test Suite Status**: 136 Passed / 0 Failed (76% Coverage across 3,807 statements)  
+**Test Suite Status**: 147 Passed / 0 Failed (77% Coverage across 3,890 statements)  
 **Package Version**: 1.0.0  
 
 ---
@@ -270,6 +270,21 @@ Features are classified under strict audit rules:
 | Metadata Caching & Provider Fallback | **VERIFIED** | HIGH | `test_metadata_caching_and_provider_failure_fallback`; 10-minute in-memory cache delivers 0ms detail views; network failures fall back safely to SQLite cache ([`MediaService.get_details`](file:///root/t.io/media_aggregator/services/media_service.py#L100-L175)) |
 | Live Cinemeta Metadata Verification | **VERIFIED** | `LIVE VERIFIED` | `test_live_cinemeta_metadata_and_image_endpoint`; Live query to `https://v3-cinemeta.strem.io` for Inception (`tt1375666`) retrieved valid 200 OK image endpoint |
 
+### 4.13 Subtitle Architecture & Mobile Android QA Audit
+| Feature | Status | Priority | Supporting Evidence / Source Reference |
+| :--- | :---: | :---: | :--- |
+| Subtitle Track Data Model | **VERIFIED** | HIGH | `test_normalize_language_code`, `test_parse_subtitles_valid_and_invalid`; Added [`SubtitleTrack`](file:///root/t.io/media_aggregator/models.py#L94-L115) model with `id`, `url`, `lang`, `format` (`vtt`/`srt`), `label`, and formatted `display_name` |
+| ISO 639 Language Normalization | **VERIFIED** | HIGH | `test_normalize_language_code`; Normalizes 30+ ISO-639-1/2 codes (`eng`, `spa`, `fre`, `fra`, `ger`, `deu`, `ita`, `por`, `rus`, `jpn`, `ara`, `chi`, `kor`, `tur`) to standardized language names ([`normalize_language_code`](file:///root/t.io/media_aggregator/parser.py#L48-L60)) |
+| Stream Subtitle Extraction | **VERIFIED** | HIGH | `test_stream_parsers_extract_subtitles`; Both `parse_generic_stream` and `parse_torrentio_stream` extract `subtitles` array, validating URLs and file formats ([`parser.py`](file:///root/t.io/media_aggregator/parser.py#L62-L105)) |
+| Torrentio Subtitle Clarification | **VERIFIED** | `LIVE VERIFIED` | Live query of 100 movie streams (`tt1375666`) and 77 series streams (`tt0903747:1:1`) confirmed **0** streams contain `subtitles` array; Torrentio is a torrent scraper returning infohashes, not a subtitle provider |
+| Subtitle Action Button in Telegram | **VERIFIED** | HIGH | `test_stream_action_keyboard_subtitle_button`; Conditionally renders `💬 Subtitles ({count})` button only when subtitle tracks are present ([`stream_action_keyboard`](file:///root/t.io/media_aggregator/bot/keyboards.py#L380-L395)) |
+| Subtitles List Keyboard | **VERIFIED** | HIGH | `test_subtitles_list_keyboard_layout`; Lists available subtitle tracks with language and format, plus back navigation ([`subtitles_list_keyboard`](file:///root/t.io/media_aggregator/bot/keyboards.py#L400-L440)) |
+| Telegram Subtitle Document Delivery | **VERIFIED** | HIGH | `test_handle_subtitle_get_successful_download`; Downloads `.vtt` / `.srt` and delivers via `types.BufferedInputFile` with external player (VLC, MX Player) instructions ([`handle_subtitle_get`](file:///root/t.io/media_aggregator/bot/handlers/media.py#L400-L460)) |
+| Broken / Unreachable Subtitle URLs | **VERIFIED** | HIGH | `test_handle_subtitle_get_broken_remote_url`; Gracefully catches HTTP errors/timeouts and supplies direct link without crashing ([`handle_subtitle_get`](file:///root/t.io/media_aggregator/bot/handlers/media.py#L461-L490)) |
+| Magnet-Only Invariant Preservation | **VERIFIED** | HIGH | `test_magnet_only_invariant_preserved`; Telegram streams remain strictly Magnet-only for downloads; Direct HTTP streams never display a media download button |
+| Android Poster & Backdrop Display | **VERIFIED** | `MOCK VERIFIED`<br>`LIVE VERIFIED` | Live Cinemeta endpoints return crisp 800px+ portraits (105KB WebP) and 1280px landscape backdrops (695KB JPEG); rendered via Bot API 7.0 large media preview |
+| Android Torrent Client Launch | **BLOCKED** | `BLOCKED` | Automated opening inside Android apps (Flud / LibreTorrent) cannot execute inside this headless Linux CI/container environment without a physical Android device or GUI emulator |
+
 ---
 
 ## 5. Test Suite & Coverage Status
@@ -277,8 +292,8 @@ Features are classified under strict audit rules:
 ### Coverage Summary
 ```text
 Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.1.0, pytest-asyncio-1.4.1
-Total Tests: 136 passed / 0 failed in 41.79s
-Overall Statement Coverage: 76% (3,807 statements, 922 missed)
+Total Tests: 147 passed / 0 failed in 34.59s
+Overall Statement Coverage: 77% (3,890 statements)
 ```
 
 ### Module Breakdown
@@ -351,7 +366,7 @@ Overall Statement Coverage: 76% (3,807 statements, 922 missed)
 ## 8. Agent Handoff Guide
 
 ### Current Project State
-The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 136 automated tests pass with zero warnings (76% coverage across 3,807 statements), with both mock tests and live external network integrations passing. Multi-tier search ranking (`media_aggregator/search.py`) provides mathematical immunity for exact title matches over partial matches, tolerates typos, extracts year hints, routes media types, promotes provider diversity on page 1, and merges duplicate records. The Telegram Bot implements a strictly Magnet-only download flow (`Search → Details → Seasons/Episodes → Streams → Magnet Download`), delivering RFC-compliant Magnet URIs and `.magnet` files for external BitTorrent clients while prohibiting direct in-bot HTTP file downloads. Visual presentation is powered by official Cinemeta artwork (`media_aggregator/images.py`), automatically uncropping Amazon CDN thumbnails to high-resolution masters, upgrading Metahub portrait posters, and supporting landscape backdrop inspection. Stream discovery supports all 25 official Torrentio scrapers with complete stream pagination and 5-minute memory caching. Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
+The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 147 automated tests pass with zero warnings (77% coverage across 3,890 statements), with both mock tests and live external network integrations passing. Multi-tier search ranking (`media_aggregator/search.py`) provides mathematical immunity for exact title matches over partial matches, tolerates typos, extracts year hints, routes media types, promotes provider diversity on page 1, and merges duplicate records. The Telegram Bot implements a strictly Magnet-only download flow (`Search → Details → Seasons/Episodes → Streams → Magnet Download`), delivering RFC-compliant Magnet URIs and `.magnet` files for external BitTorrent clients while prohibiting direct in-bot HTTP file downloads. External subtitle tracks (`.srt` and `.vtt`) are parsed from stream responses, normalized with ISO 639 codes, and delivered directly to users as Telegram documents with player instructions (VLC, MX Player) and external links. Visual presentation is powered by official Cinemeta artwork (`media_aggregator/images.py`), automatically uncropping Amazon CDN thumbnails to high-resolution masters, upgrading Metahub portrait posters, and supporting landscape backdrop inspection. Stream discovery supports all 25 official Torrentio scrapers with complete stream pagination and 5-minute memory caching. Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
 
 ### Critical Files to Know
 - **Search & Ranking Engine**: [`media_aggregator/search.py`](file:///root/t.io/media_aggregator/search.py) (scoring, fuzzy matching, query parsing, deduplication)

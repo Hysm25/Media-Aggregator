@@ -16,6 +16,7 @@ from media_aggregator.bot.callbacks import (
     SeasonCallback,
     SettingsCallback,
     StreamCallback,
+    SubtitleCallback,
 )
 from media_aggregator.models import (
     AddonConfig,
@@ -25,6 +26,7 @@ from media_aggregator.models import (
     MediaItem,
     MediaType,
     StreamSource,
+    SubtitleTrack,
     UserRecord,
     UserSettings,
 )
@@ -375,6 +377,21 @@ def stream_action_keyboard(
             ),
         ])
 
+    if stream.subtitles:
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"💬 Subtitles ({len(stream.subtitles)})",
+                callback_data=SubtitleCallback(
+                    id=media_id,
+                    season=season,
+                    episode=episode,
+                    stream_idx=stream_idx,
+                    action="list",
+                    page=page,
+                ).pack(),
+            )
+        ])
+
     buttons.append([
         InlineKeyboardButton(
             text="🔙 Back to Streams",
@@ -382,6 +399,53 @@ def stream_action_keyboard(
                 id=media_id,
                 season=season,
                 episode=episode,
+                page=page,
+            ).pack(),
+        ),
+        InlineKeyboardButton(text="🏠 Home", callback_data=NavCallback(action="home").pack()),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def subtitles_list_keyboard(
+    media_id: str,
+    subtitles: List[SubtitleTrack],
+    season: int = 0,
+    episode: int = 0,
+    stream_idx: int = 0,
+    page: int = 0,
+) -> InlineKeyboardMarkup:
+    """Build keyboard listing available subtitles for a stream."""
+    buttons: List[List[InlineKeyboardButton]] = []
+    for idx, sub in enumerate(subtitles):
+        lang_title = sub.display_name
+        label = f"💬 {idx + 1}. {lang_title}"
+        if len(label) > 52:
+            label = label[:49] + "..."
+        buttons.append([
+            InlineKeyboardButton(
+                text=label,
+                callback_data=SubtitleCallback(
+                    id=media_id,
+                    season=season,
+                    episode=episode,
+                    stream_idx=stream_idx,
+                    sub_idx=idx,
+                    action="get",
+                    page=page,
+                ).pack(),
+            )
+        ])
+
+    buttons.append([
+        InlineKeyboardButton(
+            text="🔙 Back to Stream",
+            callback_data=StreamCallback(
+                id=media_id,
+                season=season,
+                episode=episode,
+                idx=stream_idx,
+                action="view",
                 page=page,
             ).pack(),
         ),
