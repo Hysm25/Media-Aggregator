@@ -51,13 +51,15 @@ class CinemetaProvider(BaseProvider):
         episodes: List[EpisodeItem] = []
         raw_videos = item.get("videos", [])
         for v in raw_videos:
-            v_id = v.get("id", f"{m_id}:{v.get('season', 1)}:{v.get('episode', 1)}")
+            s_num = v.get("season") if v.get("season") is not None else 1
+            e_num = v.get("number") if v.get("number") is not None else v.get("episode", 1)
+            v_id = v.get("id", f"{m_id}:{s_num}:{e_num}")
             episodes.append(
                 EpisodeItem(
                     id=v_id,
-                    season=v.get("season", 1),
-                    episode=v.get("number") or v.get("episode", 1),
-                    title=v.get("name") or f"Episode {v.get('number', 1)}",
+                    season=s_num,
+                    episode=e_num,
+                    title=v.get("name") or f"Episode {e_num}",
                     overview=v.get("overview") or v.get("description"),
                     released=v.get("released") or v.get("firstAired"),
                     thumbnail=v.get("thumbnail"),

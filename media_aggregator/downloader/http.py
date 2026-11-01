@@ -47,6 +47,9 @@ class HTTPDownloader:
         dest.parent.mkdir(parents=True, exist_ok=True)
         part_path = dest.with_name(f"{dest.name}.part")
 
+        # Reset cancel flag at start of new download
+        self._cancel_event.clear()
+
         downloaded_bytes = 0
         if part_path.exists():
             downloaded_bytes = part_path.stat().st_size
@@ -57,17 +60,43 @@ class HTTPDownloader:
         if downloaded_bytes > 0:
             headers["Range"] = f"bytes={downloaded_bytes}-"
 
-        response = self.session.get(url, headers=headers, stream=True, timeout=self.timeout)
+        try:
+            response = self.session.get(url, headers=headers, stream=True, timeout=self.timeout)
+        except requests.RequestException as e:
+            raise ConnectionError(f"Network error while connecting to {url}: {e}") from e
 
         # Check for range satisfaction or fresh download
         if response.status_code == 416:
-            # Range not satisfiable, file might already be complete or invalid range
+            # Range not satisfiable. Check if part file is already complete and valid
+            is_valid_complete = False
             if part_path.exists():
+                if expected_sha256:
+                    hasher = hashlib.sha256()
+                    with open(part_path, "rb") as f:
+                        while chunk := f.read(128 * 1024):
+                            hasher.update(chunk)
+                    if hasher.hexdigest().lower() == expected_sha256.lower():
+                        is_valid_complete = True
+                else:
+                    # Check Content-Range header if provided: bytes */total
+                    cr = response.headers.get("Content-Range", "")
+                    if "/" in cr:
+                        total_str = cr.split("/")[-1].strip()
+                        if total_str.isdigit() and int(total_str) == part_path.stat().st_size:
+                            is_valid_complete = True
+
+            if is_valid_complete:
                 part_path.rename(dest)
                 return str(dest)
-            # Restart from 0
+
+            # Otherwise, the partial file is corrupted/stale; remove and restart from 0
+            if part_path.exists():
+                part_path.unlink()
             downloaded_bytes = 0
-            response = self.session.get(url, stream=True, timeout=self.timeout)
+            try:
+                response = self.session.get(url, stream=True, timeout=self.timeout)
+            except requests.RequestException as e:
+                raise ConnectionError(f"Network error while restarting download from {url}: {e}") from e
 
         if response.status_code not in (200, 206):
             raise requests.HTTPError(
@@ -120,8 +149,10 @@ class HTTPDownloader:
                             progress_callback(downloaded_bytes, total_bytes, speed_bps, eta)
 
         # Final progress report
+        total_elapsed = time.time() - start_time
+        final_speed = (downloaded_bytes / total_elapsed) if total_elapsed > 0 else speed_bps
         if progress_callback:
-            progress_callback(downloaded_bytes, total_bytes, speed_bps, 0)
+            progress_callback(downloaded_bytes, total_bytes, final_speed, 0)
 
         # Move partial file to destination
         if dest.exists():

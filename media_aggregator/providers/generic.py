@@ -17,8 +17,9 @@ class GenericStremioProvider(BaseProvider):
         name: str,
         base_url: str,
         timeout: float = 10.0,
+        config_options: Optional[Dict[str, Any]] = None,
     ):
-        super().__init__(name=name, base_url=base_url, timeout=timeout)
+        super().__init__(name=name, base_url=base_url, timeout=timeout, config_options=config_options)
 
     def _parse_item_dict(self, item: Dict[str, Any], default_type: MediaType) -> MediaItem:
         m_id = item.get("id", "")
@@ -61,13 +62,39 @@ class GenericStremioProvider(BaseProvider):
             episodes=episodes,
         )
 
+    def _find_catalog_id_for_search(self, media_type: MediaType) -> str:
+        """Find the appropriate catalog ID from the manifest that supports search."""
+        if not self._manifest:
+            try:
+                self.fetch_manifest()
+            except Exception:
+                pass
+
+        if self._manifest and self._manifest.catalogs:
+            type_str = media_type.value
+            for cat in self._manifest.catalogs:
+                if isinstance(cat, dict) and cat.get("type") == type_str:
+                    extra = cat.get("extra", [])
+                    has_search = any(
+                        isinstance(e, dict) and e.get("name") == "search"
+                        for e in extra
+                    )
+                    if has_search:
+                        return cat.get("id", "top")
+            # If no explicit search extra, return first catalog matching type
+            for cat in self._manifest.catalogs:
+                if isinstance(cat, dict) and cat.get("type") == type_str:
+                    return cat.get("id", "top")
+
+        return "top"
+
     def search(self, query: str, media_type: MediaType = MediaType.MOVIE) -> List[MediaItem]:
         """Query catalog search if supported by the addon."""
         type_str = media_type.value
         encoded_query = urllib.parse.quote(query)
+        cat_id = self._find_catalog_id_for_search(media_type)
 
-        # Try standard catalog search endpoint
-        url = f"{self.base_url}/catalog/{type_str}/top/search={encoded_query}.json"
+        url = f"{self.base_url}/catalog/{type_str}/{cat_id}/search={encoded_query}.json"
         try:
             resp = self.session.get(url, timeout=self.timeout)
             if resp.status_code == 200:

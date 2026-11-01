@@ -42,8 +42,8 @@ def cli() -> None:
 def search_cmd(query: str, media_type: str) -> None:
     """🔍 Search movies or TV shows by title or keywords."""
     registry = ProviderRegistry()
-    discovery = registry.get_discovery_provider()
     m_type = MediaType(media_type.lower())
+    discovery = registry.get_discovery_provider(media_type=m_type)
 
     with console.status(f"[bold cyan]Searching {m_type.value}s for '{query}'...[/bold cyan]"):
         results = discovery.search(query=query, media_type=m_type)
@@ -403,14 +403,14 @@ def addons_remove_cmd(addon_id: str) -> None:
 
 @cli.command("config-torrentio")
 @click.option("--providers", help="Comma-separated providers (e.g. yts,1337x,rarbg).")
-@click.option("--sort", type=click.Choice(["qualitysize", "seeders", "size"]), default="qualitysize")
+@click.option("--sort", type=click.Choice(["qualitysize", "seeders", "size"]), default=None)
 @click.option("--qualityfilter", help="Comma-separated quality filter (e.g. cam,scr).")
 @click.option("--limit", type=int, help="Max streams per quality.")
 @click.option("--debrid", help="Debrid provider (e.g. realdebrid, alldebrid, torbox).")
 @click.option("--api-key", help="Debrid API key.")
 def config_torrentio_cmd(
     providers: Optional[str],
-    sort: str,
+    sort: Optional[str],
     qualityfilter: Optional[str],
     limit: Optional[int],
     debrid: Optional[str],
@@ -432,7 +432,7 @@ def config_torrentio_cmd(
     opts = t_addon.config_options or {}
     if providers is not None:
         opts["providers"] = [p.strip() for p in providers.split(",") if p.strip()]
-    if sort:
+    if sort is not None:
         opts["sort"] = sort
     if qualityfilter is not None:
         opts["qualityfilter"] = [q.strip() for q in qualityfilter.split(",") if q.strip()]

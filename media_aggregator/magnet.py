@@ -134,6 +134,9 @@ def dispatch_to_torrent_client(magnet_uri: str, client: Optional[str] = None) ->
             if res.returncode == 0:
                 return True, "Added torrent to transmission-daemon."
             return False, f"transmission-remote failed: {res.stderr.strip()}"
+        elif chosen in ("qbittorrent", "qbittorrent-nox"):
+            subprocess.Popen([chosen, magnet_uri], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True, f"Dispatched magnet URI to {chosen}."
         else:
             return False, f"Unsupported automatic dispatch client: {chosen}"
     except Exception as e:

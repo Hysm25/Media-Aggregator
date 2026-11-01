@@ -161,9 +161,13 @@ def parse_torrentio_stream(raw: Dict[str, Any], provider_name: str = "Torrentio"
             inner_filename = line
 
     # Determine source type
-    is_debrid = "[RD" in name or "[AD" in name or "[PM" in name or "[TB" in name or bool(url and not info_hash)
+    # Debrid providers embed tag badges in the stream name/title (e.g., [RD+], [AD+], [PM+], [TB+], [DL+])
+    has_debrid_badge = bool(
+        re.search(r"\[(RD|AD|PM|TB|DL|OC|PO)\+?\]", f"{name} {title}", re.IGNORECASE)
+    )
+    is_debrid = has_debrid_badge
     if is_debrid:
-        source_type = SourceType.DEBRID if url else SourceType.TORRENT
+        source_type = SourceType.DEBRID
     elif info_hash:
         source_type = SourceType.TORRENT
     elif url:

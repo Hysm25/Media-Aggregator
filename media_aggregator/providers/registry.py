@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 import requests
-from media_aggregator.models import AddonConfig, AddonManifest
+from media_aggregator.models import AddonConfig, AddonManifest, MediaType
 from media_aggregator.providers.base import BaseProvider
 from media_aggregator.providers.cinemeta import CinemetaProvider
 from media_aggregator.providers.generic import GenericStremioProvider
@@ -36,16 +36,20 @@ class ProviderRegistry:
         elif "cinemeta" in config.id.lower() or "cinemeta" in config.base_url.lower():
             return CinemetaProvider(base_url=config.base_url)
         else:
-            return GenericStremioProvider(name=config.name, base_url=config.base_url)
+            return GenericStremioProvider(name=config.name, base_url=config.base_url, config_options=opts)
 
     def get_active_providers(self) -> List[BaseProvider]:
         """Fetch all enabled providers sorted by priority."""
         configs = self.storage.get_addons(enabled_only=True)
         return [self.get_provider_instance(c) for c in configs]
 
-    def get_discovery_provider(self) -> BaseProvider:
+    def get_discovery_provider(self, media_type: Optional[MediaType] = None) -> BaseProvider:
         """Get the primary provider used for catalog and search discovery (Cinemeta by default)."""
         providers = self.get_active_providers()
+        if media_type == MediaType.ANIME:
+            for p in providers:
+                if "kitsu" in p.name.lower() or "anime" in p.name.lower():
+                    return p
         for p in providers:
             if isinstance(p, CinemetaProvider):
                 return p
@@ -59,8 +63,8 @@ class ProviderRegistry:
     def get_stream_providers(self) -> List[BaseProvider]:
         """Get all active providers capable of returning streams."""
         providers = self.get_active_providers()
-        # Filter to those that aren't purely metadata (Cinemeta is meta-only)
-        return [p for p in providers if not isinstance(p, CinemetaProvider)]
+        # Filter to those that declare the stream resource in their manifest
+        return [p for p in providers if p.supports_resource("stream")]
 
     def register_addon_by_url(self, manifest_or_base_url: str, priority: int = 10) -> Tuple[bool, str, Optional[AddonConfig]]:
         """Validate, probe, and register a new Stremio addon from its URL."""
@@ -86,6 +90,10 @@ class ProviderRegistry:
                 return False, "Addon manifest does not contain a valid 'id' field.", None
 
             name = data.get("name", addon_id)
+            opts = {
+                "resources": data.get("resources", []),
+                "types": data.get("types", []),
+            }
             config = AddonConfig(
                 id=addon_id,
                 name=name,
@@ -93,6 +101,7 @@ class ProviderRegistry:
                 base_url=base_url,
                 enabled=True,
                 priority=priority,
+                config_options=opts,
             )
             self.storage.save_addon(config)
             return True, f"Successfully registered addon: {name} ({addon_id})", config

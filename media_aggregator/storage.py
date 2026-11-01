@@ -6,7 +6,7 @@ import contextlib
 import json
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
 from media_aggregator.models import (
@@ -160,7 +160,7 @@ class StorageManager:
                         "https://v3-cinemeta.strem.io",
                         1,
                         1,
-                        "{}",
+                        json.dumps({"resources": ["catalog", "meta", "addon_catalog"]}),
                     ),
                     (
                         "com.stremio.torrentio.addon",
@@ -169,16 +169,16 @@ class StorageManager:
                         "https://torrentio.strem.fun",
                         1,
                         5,
-                        "{}",
+                        json.dumps({"resources": ["stream"]}),
                     ),
                     (
                         "anime-kitsu",
-                        "Anime Kitsu (Anime Streams)",
+                        "Anime Kitsu (Anime Catalog & Subtitles)",
                         "https://anime-kitsu.strem.fun/manifest.json",
                         "https://anime-kitsu.strem.fun",
                         1,
                         10,
-                        "{}",
+                        json.dumps({"resources": ["catalog", "meta", "subtitles"]}),
                     ),
                 ]
                 cursor.executemany(
@@ -403,7 +403,7 @@ class StorageManager:
                         speed_bps=row["speed_bps"] or 0.0,
                         eta_seconds=row["eta_seconds"],
                         error_message=row["error_message"],
-                        created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.utcnow(),
+                        created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc),
                         completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
                     )
                 )
@@ -429,7 +429,7 @@ class StorageManager:
                 speed_bps=row["speed_bps"] or 0.0,
                 eta_seconds=row["eta_seconds"],
                 error_message=row["error_message"],
-                created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.utcnow(),
+                created_at=datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now(timezone.utc),
                 completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
             )
 

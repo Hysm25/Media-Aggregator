@@ -18,10 +18,12 @@ class BaseProvider(abc.ABC):
         base_url: str,
         timeout: float = 10.0,
         headers: Optional[Dict[str, str]] = None,
+        config_options: Optional[Dict[str, Any]] = None,
     ):
         self.name = name
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.config_options = config_options or {}
         self.session = requests.Session()
         default_headers = {
             "User-Agent": "MediaSourceAggregator/1.0.0 (Stremio/Compatible; Linux)",
@@ -58,16 +60,23 @@ class BaseProvider(abc.ABC):
 
     def supports_resource(self, resource_name: str, media_type: Optional[MediaType] = None) -> bool:
         """Check if provider manifest supports a specific resource (catalog, meta, stream)."""
-        if not self._manifest:
+        resources = []
+        if self._manifest and self._manifest.resources:
+            resources = self._manifest.resources
+        elif self.config_options and self.config_options.get("resources"):
+            resources = self.config_options.get("resources")
+        else:
             try:
                 self.fetch_manifest()
+                if self._manifest:
+                    resources = self._manifest.resources
             except Exception:
                 return False
 
-        if not self._manifest or not self._manifest.resources:
+        if not resources:
             return False
 
-        for res in self._manifest.resources:
+        for res in resources:
             if isinstance(res, str) and res == resource_name:
                 return True
             elif isinstance(res, dict) and res.get("name") == resource_name:

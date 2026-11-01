@@ -100,6 +100,13 @@ class DownloadManager:
                     local_path=final_path,
                     completed=True,
                 )
+            except (KeyboardInterrupt, InterruptedError):
+                self.storage.update_download(
+                    rec_id,
+                    status=DownloadStatus.CANCELLED,
+                    error_message="Download was cancelled by user.",
+                )
+                raise
             except Exception as e:
                 self.storage.update_download(
                     rec_id,
@@ -129,7 +136,9 @@ class DownloadManager:
 
             # Try to dispatch to client if available
             dispatched, msg = TorrentDownloader.dispatch(magnet_uri)
-            if dispatched:
+            # If dispatched to an active downloader daemon (aria2c or transmission), status is DOWNLOADING.
+            # If exported as magnet or dispatched to generic launcher (xdg-open), status is COMPLETED.
+            if dispatched and any(d in msg for d in ["aria2c", "transmission-daemon"]):
                 self.storage.update_download(
                     rec_id,
                     status=DownloadStatus.DOWNLOADING,
@@ -139,7 +148,7 @@ class DownloadManager:
                 self.storage.update_download(
                     rec_id,
                     status=DownloadStatus.COMPLETED,
-                    error_message=f"Magnet file saved. {msg}",
+                    error_message=f"Magnet file exported. {msg}",
                     completed=True,
                 )
 
