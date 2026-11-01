@@ -223,7 +223,7 @@ Run the test suite with coverage:
 pytest -v --cov=media_aggregator tests/
 ```
 
-All 40 unit and integration tests verify:
+All 49 unit, integration, and regression tests verify:
 - Stream title and codec parsing
 - Base32 and hex infohash normalization
 - Magnet link generation and parsing
