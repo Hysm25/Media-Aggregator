@@ -11,13 +11,18 @@ from media_aggregator.bot.callbacks import (
     SeasonCallback,
     StreamCallback,
 )
-from media_aggregator.bot.handlers.search import escape_markdown
 from media_aggregator.bot.keyboards import (
     episodes_keyboard,
     media_detail_keyboard,
     seasons_keyboard,
     stream_action_keyboard,
     streams_keyboard,
+)
+from media_aggregator.bot.ui_utils import (
+    escape_markdown,
+    format_media_caption,
+    render_media_card,
+    safe_edit_or_replace_message,
 )
 from media_aggregator.models import EpisodeItem, MediaType, UserRecord
 from media_aggregator.services.media_service import MediaService
@@ -33,7 +38,7 @@ async def handle_media_view(
     media_service: MediaService,
     user_record: UserRecord,
 ) -> None:
-    """Display synopsis and details for selected media item."""
+    """Display synopsis and details for selected media item with poster image."""
     item = await media_service.get_details(callback_data.id)
     if not item:
         await callback.answer("Unable to load media details.", show_alert=True)
@@ -43,45 +48,14 @@ async def handle_media_view(
     bookmarks = media_service.storage.get_bookmarks(user_id=user_record.user_id)
     is_bm = any(b.get("media_id") == item.id for b in bookmarks)
 
-    icon = "🎬" if item.type == MediaType.MOVIE else "📺"
-    safe_title = escape_markdown(item.title)
-    year_str = f" ({item.display_year})" if item.year else ""
-    rating_str = f"⭐ IMDb: {item.imdb_rating}/10" if item.imdb_rating else ""
-    runtime_str = f"⏳ {item.runtime}" if item.runtime else ""
-    genres_str = f"🎭 {escape_markdown(', '.join(item.genres))}" if item.genres else ""
-    cast_str = f"👤 Cast: {escape_markdown(', '.join(item.cast[:4]))}" if item.cast else ""
-    director_str = f"🎬 Director: {escape_markdown(item.director)}" if item.director else ""
-
-    meta_lines = [part for part in [rating_str, runtime_str] if part]
-    meta_row = " • ".join(meta_lines)
-
-    text_parts = [f"{icon} **{safe_title}**{year_str}"]
-    if meta_row:
-        text_parts.append(meta_row)
-    if genres_str:
-        text_parts.append(genres_str)
-    if director_str:
-        text_parts.append(director_str)
-    if cast_str:
-        text_parts.append(cast_str)
-
-    if item.synopsis:
-        safe_synopsis = escape_markdown(item.synopsis[:600])
-        text_parts.append(f"\n📝 *Synopsis*:\n{safe_synopsis}")
-
-    caption = "\n".join(text_parts)
+    caption = format_media_caption(item)
     keyboard = media_detail_keyboard(item, is_bookmarked=is_bm)
 
-    try:
-        await callback.message.edit_text(  # type: ignore
-            caption,
-            parse_mode="Markdown",
-            reply_markup=keyboard,
-        )
-    except Exception:
-        # Fallback without markdown parsing if rich text fails
-        await callback.message.edit_text(  # type: ignore
-            caption.replace("*", "").replace("`", ""),
+    if callback.message:
+        await render_media_card(
+            message=callback.message,
+            item=item,
+            caption=caption,
             reply_markup=keyboard,
         )
     await callback.answer()
@@ -133,11 +107,12 @@ async def handle_seasons_view(
         season_numbers = [1]
 
     safe_title = escape_markdown(item.title)
-    await callback.message.edit_text(  # type: ignore
-        f"📺 **{safe_title}**\nSelect a season to view episodes:",
-        parse_mode="Markdown",
-        reply_markup=seasons_keyboard(item.id, season_numbers),
-    )
+    if callback.message:
+        await safe_edit_or_replace_message(
+            message=callback.message,
+            text=f"📺 **{safe_title}**\nSelect a season to view episodes:",
+            reply_markup=seasons_keyboard(item.id, season_numbers),
+        )
     await callback.answer()
 
 
@@ -161,15 +136,16 @@ async def handle_season_episodes(
         return
 
     safe_title = escape_markdown(item.title)
-    await callback.message.edit_text(  # type: ignore
-        f"📺 **{safe_title}** — Season {callback_data.season}\nSelect an episode:",
-        parse_mode="Markdown",
-        reply_markup=episodes_keyboard(
-            media_id=item.id,
-            season=callback_data.season,
-            episodes=episodes,
-        ),
-    )
+    if callback.message:
+        await safe_edit_or_replace_message(
+            message=callback.message,
+            text=f"📺 **{safe_title}** — Season {callback_data.season}\nSelect an episode:",
+            reply_markup=episodes_keyboard(
+                media_id=item.id,
+                season=callback_data.season,
+                episodes=episodes,
+            ),
+        )
     await callback.answer()
 
 
@@ -188,11 +164,11 @@ async def handle_episode_streams(
     is_series = (item and item.type == MediaType.SERIES) or callback_data.season > 0 or callback_data.episode > 0
     ep_str = f" S{callback_data.season:02d}E{callback_data.episode:02d}" if (callback_data.season > 0 or callback_data.episode > 0) else ""
 
-    await callback.message.edit_text(  # type: ignore
-        f"⚡ Resolving streaming sources for **{safe_title}**{ep_str}...\n"
-        "Querying Torrentio and active providers...",
-        parse_mode="Markdown",
-    )
+    if callback.message:
+        await safe_edit_or_replace_message(
+            message=callback.message,
+            text=f"⚡ Resolving streaming sources for **{safe_title}**{ep_str}...\nQuerying Torrentio and active providers...",
+        )
 
     season_arg = callback_data.season if is_series else None
     episode_arg = callback_data.episode if is_series else None
@@ -209,25 +185,25 @@ async def handle_episode_streams(
         streams = []
 
     if not streams:
-        await callback.message.edit_text(  # type: ignore
-            f"❌ No active stream sources found for **{safe_title}**{ep_str}.\n"
-            "Try adjusting your settings or verifying active add-ons.",
-            parse_mode="Markdown",
-            reply_markup=media_detail_keyboard(item, is_bookmarked=False) if item else None,
-        )
+        if callback.message:
+            await safe_edit_or_replace_message(
+                message=callback.message,
+                text=f"❌ No active stream sources found for **{safe_title}**{ep_str}.\nTry adjusting your settings or verifying active add-ons.",
+                reply_markup=media_detail_keyboard(item, is_bookmarked=False) if item else None,
+            )
         return
 
-    await callback.message.edit_text(  # type: ignore
-        f"⚡ Found **{len(streams)}** stream sources for **{safe_title}**{ep_str}:\n"
-        "Select a source to inspect details or start downloading:",
-        parse_mode="Markdown",
-        reply_markup=streams_keyboard(
-            media_id=callback_data.id,
-            streams=streams,
-            season=callback_data.season,
-            episode=callback_data.episode,
-        ),
-    )
+    if callback.message:
+        await safe_edit_or_replace_message(
+            message=callback.message,
+            text=f"⚡ Found **{len(streams)}** stream sources for **{safe_title}**{ep_str}:\nSelect a source to inspect details or start downloading:",
+            reply_markup=streams_keyboard(
+                media_id=callback_data.id,
+                streams=streams,
+                season=callback_data.season,
+                episode=callback_data.episode,
+            ),
+        )
     await callback.answer()
 
 
@@ -285,5 +261,10 @@ async def handle_stream_detail_view(
         stream_idx=callback_data.idx,
     )
 
-    await callback.message.edit_text(caption, parse_mode="Markdown", reply_markup=keyboard)  # type: ignore
+    if callback.message:
+        await safe_edit_or_replace_message(
+            message=callback.message,
+            text=caption,
+            reply_markup=keyboard,
+        )
     await callback.answer()

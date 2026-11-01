@@ -58,16 +58,37 @@ def search_results_keyboard(
     page: int = 0,
     page_size: int = 5,
 ) -> InlineKeyboardMarkup:
-    """Build paginated search results keyboard."""
+    """Build paginated search results keyboard with featured quick action and clear numbering."""
     total_pages = max(1, math.ceil(len(results) / page_size))
     page = max(0, min(page, total_pages - 1))
     slice_items = results[page * page_size : (page + 1) * page_size]
 
     buttons: List[List[InlineKeyboardButton]] = []
-    for item in slice_items:
-        icon = "🎬" if item.type == MediaType.MOVIE else "📺"
-        year_str = f" ({item.year})" if item.year else ""
-        label = f"{icon} {item.title[:28]}{year_str}"
+
+    # Quick 1-tap stream/seasons action for featured top item
+    if slice_items:
+        feat = slice_items[0]
+        if feat.type == MediaType.SERIES:
+            buttons.append([
+                InlineKeyboardButton(
+                    text=f"📺 Browse Seasons: {feat.title[:20]}",
+                    callback_data=MediaCallback(id=feat.id, action="seasons").pack(),
+                )
+            ])
+        else:
+            buttons.append([
+                InlineKeyboardButton(
+                    text=f"⚡ Stream: {feat.title[:22]}",
+                    callback_data=EpisodeCallback(id=feat.id, season=0, episode=0).pack(),
+                )
+            ])
+
+    # Numbered item buttons
+    for idx, item in enumerate(slice_items, start=(page * page_size) + 1):
+        icon = "🎬" if item.type == MediaType.MOVIE else ("⛩️" if item.type == MediaType.ANIME else "📺")
+        year_str = f" ({item.display_year})" if item.year else ""
+        rating_str = f" ⭐{item.imdb_rating}" if item.imdb_rating else ""
+        label = f"{idx}. {icon} {item.title[:22]}{year_str}{rating_str}"
         buttons.append([
             InlineKeyboardButton(
                 text=label,
@@ -108,8 +129,12 @@ def search_results_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def media_detail_keyboard(item: MediaItem, is_bookmarked: bool = False) -> InlineKeyboardMarkup:
-    """Build media details action keyboard."""
+def media_detail_keyboard(
+    item: MediaItem,
+    is_bookmarked: bool = False,
+    query: Optional[str] = None,
+) -> InlineKeyboardMarkup:
+    """Build media details action keyboard with back-to-search option."""
     buttons = []
     if item.type == MediaType.SERIES:
         buttons.append([
@@ -127,12 +152,21 @@ def media_detail_keyboard(item: MediaItem, is_bookmarked: bool = False) -> Inlin
         ])
 
     bm_text = "🗑️ Remove Bookmark" if is_bookmarked else "⭐ Bookmark"
-    buttons.append([
+    action_row = [
         InlineKeyboardButton(
             text=bm_text,
             callback_data=MediaCallback(id=item.id, action="bookmark").pack(),
         )
-    ])
+    ]
+    if query:
+        action_row.append(
+            InlineKeyboardButton(
+                text="🔙 Back to Results",
+                callback_data=SearchCallback(query=query[:20], page=0).pack(),
+            )
+        )
+    buttons.append(action_row)
+
     buttons.append([
         InlineKeyboardButton(text="🔍 Search", callback_data=NavCallback(action="search").pack()),
         InlineKeyboardButton(text="🏠 Home", callback_data=NavCallback(action="home").pack()),

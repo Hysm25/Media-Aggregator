@@ -1,8 +1,8 @@
 # Project Progress: Media Source Aggregator & Telegram Bot
 
-**Current Local Time**: 2026-11-01T13:52:00Z  
+**Current Local Time**: 2026-11-01T14:42:00Z  
 **Repository Commit**: `master`  
-**Test Suite Status**: 93 Passed / 0 Failed (74% Coverage across 3,152 statements)  
+**Test Suite Status**: 107 Passed / 0 Failed (75% Coverage across 3,538 statements)  
 **Package Version**: 1.0.0  
 
 ---
@@ -202,6 +202,21 @@ Statuses: `TODO` → `IN PROGRESS` → `IMPLEMENTED` → `VERIFIED` | `BLOCKED`
 | Full Search-to-Stream Telegram Flow | **VERIFIED** | HIGH | `test_complete_telegram_search_to_stream_flow`; End-to-end integration test spanning search, media details, season view, episode selector, and stream resolution |
 | Live Stremio Endpoint Integration | **VERIFIED** | HIGH | `test_live_cinemeta_and_torrentio_integration`; Verified against live `https://v3-cinemeta.strem.io` and `https://torrentio.strem.fun` endpoints |
 
+### 4.9 Search Relevance Ranking & Stremio-Like Visual UI
+| Feature | Status | Priority | Supporting Evidence / Source Reference |
+| :--- | :---: | :---: | :--- |
+| Exact Title Matching Tier | **VERIFIED** | HIGH | `test_ranking_exact_title_matches_above_partials`; Exact title matches score in tier 950-1000+, guaranteeing top placement over partials |
+| Breaking Bad Top Placement | **VERIFIED** | HIGH | `test_ranking_breaking_bad`; "Breaking Bad" series ranks #1 above spin-offs, movies, and partial matches |
+| The It Show & Fuzzy Matching | **VERIFIED** | HIGH | `test_ranking_the_it_show`; Nearest relevant titles prioritized using token sets and normalized text without leading articles |
+| Typo & Misspelling Tolerance | **VERIFIED** | HIGH | `test_ranking_fuzzy_misspellings_tolerance`; Levenshtein ratio handles misspellings like "Breking Bad", "Inceptoin", "Interstelar" |
+| Release Year Matching Bonus | **VERIFIED** | HIGH | `test_ranking_queries_with_release_years`; Queries like "Spider-Man 2002" match target year with +150 bonus over other releases |
+| Media Type Keyword Routing | **VERIFIED** | HIGH | `test_ranking_media_type_keywords`; Keywords like "movie", "series", "anime" apply +100 bonus to matching media type |
+| Multi-Provider Duplicate Merging | **VERIFIED** | HIGH | `test_duplicate_detection_and_merging`; Merges duplicate records by IMDb ID or normalized title+year, combining posters and metadata |
+| Global Pagination Consistency | **VERIFIED** | HIGH | `test_pagination_and_ranking_consistency`; Ranked list cached and paginated with zero duplicates across pages |
+| Stremio Visual Media Cards | **VERIFIED** | HIGH | `test_render_media_card_link_preview_options`; Telegram Bot API 7.0 large media preview with `prefer_large_media=True, show_above_text=True` |
+| Missing & Invalid Image Fallbacks | **VERIFIED** | HIGH | `test_visual_metadata_missing_and_invalid_images`; Graceful text fallback with `link_preview_options(is_disabled=True)` on missing/invalid URLs |
+| End-to-End Visual Interaction Flow | **VERIFIED** | HIGH | `test_search_interaction_navigation_and_pagination`, `test_search_to_details_seasons_episodes_streams_flow` |
+
 ---
 
 ## 5. Test Suite & Coverage Status
@@ -209,8 +224,8 @@ Statuses: `TODO` → `IN PROGRESS` → `IMPLEMENTED` → `VERIFIED` | `BLOCKED`
 ### Coverage Summary
 ```text
 Platform: Linux (Python 3.14.8), pytest-9.2.0, coverage-7.1.0, pytest-asyncio-1.4.1
-Total Tests: 93 passed / 0 failed in 55.83s
-Overall Statement Coverage: 74% (3,152 statements, 817 missed)
+Total Tests: 107 passed / 0 failed in 33.87s
+Overall Statement Coverage: 75% (3,538 statements, 894 missed)
 ```
 
 ### Module Breakdown
@@ -225,13 +240,15 @@ Overall Statement Coverage: 74% (3,152 statements, 817 missed)
 - `media_aggregator/parser.py`: 97%
 - `media_aggregator/storage.py`: 96%
 - `media_aggregator/bot/middlewares/rate_limit.py`: 96%
-- `media_aggregator/bot/keyboards.py`: 90%
+- `media_aggregator/bot/keyboards.py`: 92%
 - `media_aggregator/bot/config.py`: 88%
 - `media_aggregator/providers/torrentio.py`: 87%
 - `media_aggregator/aggregator.py`: 86%
+- `media_aggregator/bot/handlers/search.py`: 85%
 - `media_aggregator/bot/handlers/settings.py`: 84%
 - `media_aggregator/downloader/manager.py`: 82%
 - `media_aggregator/magnet.py`: 81%
+- `media_aggregator/search.py`: 80%
 - `media_aggregator/bot/middlewares/auth.py`: 80%
 - `media_aggregator/services/addon_service.py`: 80%
 - `media_aggregator/bot/handlers/media.py`: 79%
@@ -240,15 +257,15 @@ Overall Statement Coverage: 74% (3,152 statements, 817 missed)
 - `media_aggregator/services/download_service.py`: 76%
 - `media_aggregator/downloader/http.py`: 75%
 - `media_aggregator/bot/handlers/admin.py`: 75%
-- `media_aggregator/bot/handlers/search.py`: 73%
-- `media_aggregator/services/media_service.py`: 66%
+- `media_aggregator/services/media_service.py`: 72%
+- `media_aggregator/bot/ui_utils.py`: 65%
 - `media_aggregator/cli/ui.py`: 60%
+- `media_aggregator/providers/generic.py`: 56%
 - `media_aggregator/providers/base.py`: 54%
 - `media_aggregator/cli/main.py`: 51%
 - `media_aggregator/providers/registry.py`: 49%
 - `media_aggregator/bot/handlers/downloads.py`: 45%
 - `media_aggregator/bot/app.py`: 36%
-- `media_aggregator/providers/generic.py`: 36%
 - `media_aggregator/bot/handlers/addons.py`: 30%
 
 ---
@@ -281,9 +298,11 @@ Overall Statement Coverage: 74% (3,152 statements, 817 missed)
 ## 8. Agent Handoff Guide
 
 ### Current Project State
-The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 93 automated tests pass with zero warnings (74% coverage across 3,152 statements). Unified movie and TV series search is fixed, and Stremio protocol compliance is enhanced (catalog querying, `idPrefixes` capability checks, direct magnet parsing, releaseInfo fallback). Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
+The project is a fully functional, installed Python package (`media-source-aggregator` v1.0.0) supporting both the Click CLI (`media-aggregator`, `msa`) and a complete asynchronous Telegram Bot (`media-aggregator bot`). All 107 automated tests pass with zero warnings (75% coverage across 3,538 statements). Multi-tier search ranking (`media_aggregator/search.py`) prioritizes exact titles, tolerates typos, extracts year hints, routes media types, and merges duplicates. Telegram presentation features Stremio-like visual media cards (`media_aggregator/bot/ui_utils.py`) displaying actual posters above formatted metadata with 1-tap stream discovery. Environment configuration is fully managed via `.env` with `python-dotenv`, startup validation, and trusted administrator enforcement (`TELEGRAM_ADMIN_IDS`).
 
 ### Critical Files to Know
+- **Search & Ranking Engine**: [`media_aggregator/search.py`](file:///root/t.io/media_aggregator/search.py) (scoring, fuzzy matching, query parsing, deduplication)
+- **Visual Card UI Utils**: [`media_aggregator/bot/ui_utils.py`](file:///root/t.io/media_aggregator/bot/ui_utils.py) (media card formatting, LinkPreviewOptions large poster rendering)
 - **Configuration & Environment**: [`media_aggregator/bot/config.py`](file:///root/t.io/media_aggregator/bot/config.py), [`.env.example`](file:///root/t.io/.env.example)
 - **Telegram Bot Runner**: [`media_aggregator/bot/app.py`](file:///root/t.io/media_aggregator/bot/app.py) (aiogram dispatcher, dependency injection, lifecycle)
 - **Auth & Rate Limiting**: [`media_aggregator/bot/middlewares/auth.py`](file:///root/t.io/media_aggregator/bot/middlewares/auth.py), [`media_aggregator/bot/middlewares/rate_limit.py`](file:///root/t.io/media_aggregator/bot/middlewares/rate_limit.py)

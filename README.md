@@ -15,6 +15,8 @@ An independent, extensible Python media aggregator inspired by Torrentio and the
   - **BitTorrent / Magnet**: RFC-compliant Magnet URI construction with high-speed public tracker pools, BEP-53 selective file indices (`so=X`), `.magnet` file export, and local client dispatch (`aria2c`, `transmission-remote`, `qbittorrent`, `xdg-open`).
 - **Persistent Local Records & Multi-User Support**: Embedded SQLite database (`~/.media_aggregator/data.db`) storing media metadata cache, discovered stream history, download jobs, registered users, and provider configurations with user-level isolation.
 - **Interactive CLI & Rich Formatting**: Terminal interface built with Click and Rich, displaying colored tables, details panels, and progress bars.
+- **Search Relevance & Ranking Engine**: Multi-tiered ranking algorithm prioritizing exact title matches above partials, normalized matching without leading articles, typo tolerance (Levenshtein distance), release year extraction, media type keyword hints, and multi-provider duplicate merging.
+- **Stremio-Like Visual Media Cards**: Mobile-optimized Telegram interface featuring actual high-resolution poster images rendered via Bot API 7.0 large media preview, formatted synopsis, IMDb ratings, runtimes, cast, and 1-tap stream discovery.
 - **Telegram Bot Interface (aiogram 3.x)**: Full-featured asynchronous Telegram Bot interface with inline navigation keyboards, movie/series search, season and episode browsing, live download progress bars, background workers, restart recovery, rate-limiting, and an admin dashboard.
 
 ---
@@ -304,7 +306,7 @@ Run the test suite with coverage:
 pytest -v --cov=media_aggregator tests/
 ```
 
-All 93 unit, integration, and regression tests verify:
+All 107 unit, integration, and regression tests verify:
 - Stream title and codec parsing
 - Base32 and hex infohash normalization
 - Magnet link generation, extraction from `externalUrl`, and parsing
@@ -318,6 +320,9 @@ All 93 unit, integration, and regression tests verify:
 - Environment variable and `.env` configuration loading, startup validation, and trusted admin authorization rules
 - Unified movie and TV series search across multiple Stremio catalogs
 - Stremio add-on `idPrefixes` capability enforcement, flexible metadata signatures, and releaseInfo fallbacks
+- Search ranking relevance (Breaking Bad, The It Show, typos, release years, exact vs partial, media types, duplicate merging)
+- Visual media cards with Bot API 7.0 large posters, link preview options, and missing/invalid image fallbacks
+- Complete end-to-end Telegram search-to-stream user journey
 
 ---
 

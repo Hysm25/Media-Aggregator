@@ -3,24 +3,17 @@
 from __future__ import annotations
 
 import logging
+import math
 from aiogram import F, Router, types
 from aiogram.filters import Command
 from media_aggregator.bot.callbacks import NavCallback, SearchCallback
 from media_aggregator.bot.keyboards import main_menu_keyboard, search_results_keyboard
+from media_aggregator.bot.ui_utils import escape_markdown, format_media_caption, render_media_card
 from media_aggregator.models import UserRecord
 from media_aggregator.services.media_service import MediaService
 
 logger = logging.getLogger("media_aggregator.bot.search")
 router = Router(name="search")
-
-
-def escape_markdown(text: str) -> str:
-    """Escape special characters for Telegram legacy Markdown."""
-    if not text:
-        return ""
-    for ch in ("*", "_", "`", "[", "]"):
-        text = text.replace(ch, f"\\{ch}")
-    return text
 
 
 @router.callback_query(NavCallback.filter(F.action == "search"))
@@ -104,11 +97,20 @@ async def perform_search(
         )
         return
 
-    await status_msg.edit_text(
-        f"🎯 Found **{len(results)}** matches for *'{safe_query}'*:\nSelect an item to view synopsis and streams:",
-        parse_mode="Markdown",
-        reply_markup=search_results_keyboard(results=results, query=query, page=0),
+    page = 0
+    page_size = 5
+    total_pages = max(1, math.ceil(len(results) / page_size))
+    slice_items = results[page * page_size : (page + 1) * page_size]
+    featured_item = slice_items[0] if slice_items else results[0]
+
+    header_text = f"🎯 Found **{len(results)}** matches for *'{safe_query}'* *(Page {page + 1}/{total_pages})*:\n"
+    caption = format_media_caption(
+        item=featured_item,
+        header=header_text,
+        footer="Select an item below to browse streams or details:",
     )
+    keyboard = search_results_keyboard(results=results, query=query, page=page, page_size=page_size)
+    await render_media_card(status_msg, item=featured_item, caption=caption, reply_markup=keyboard)
 
 
 @router.callback_query(SearchCallback.filter())
@@ -129,13 +131,24 @@ async def handle_search_page(
         await callback.answer("No results found.", show_alert=True)
         return
 
-    await callback.message.edit_text(  # type: ignore
-        f"🎯 Matches for *'{safe_query}'*:\nSelect an item to view synopsis and streams:",
-        parse_mode="Markdown",
-        reply_markup=search_results_keyboard(
-            results=results,
-            query=callback_data.query,
-            page=callback_data.page,
-        ),
+    page_size = 5
+    total_pages = max(1, math.ceil(len(results) / page_size))
+    page = max(0, min(callback_data.page, total_pages - 1))
+    slice_items = results[page * page_size : (page + 1) * page_size]
+    featured_item = slice_items[0] if slice_items else results[0]
+
+    header_text = f"🎯 *Matches for* '{safe_query}' *(Page {page + 1}/{total_pages})*:\n"
+    caption = format_media_caption(
+        item=featured_item,
+        header=header_text,
+        footer="Select an item below to browse streams or details:",
     )
+    keyboard = search_results_keyboard(
+        results=results,
+        query=callback_data.query,
+        page=page,
+        page_size=page_size,
+    )
+    if callback.message:
+        await render_media_card(callback.message, item=featured_item, caption=caption, reply_markup=keyboard)
     await callback.answer()
