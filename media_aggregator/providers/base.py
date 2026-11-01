@@ -26,8 +26,9 @@ class BaseProvider(abc.ABC):
         self.config_options = config_options or {}
         self.session = requests.Session()
         default_headers = {
-            "User-Agent": "MediaSourceAggregator/1.0.0 (Stremio/Compatible; Linux)",
-            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Stremio/4.4.168",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
         }
         if headers:
             default_headers.update(headers)

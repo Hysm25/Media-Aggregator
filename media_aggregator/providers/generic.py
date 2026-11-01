@@ -138,20 +138,53 @@ class GenericStremioProvider(BaseProvider):
 
     def get_metadata(
         self,
-        media_id_or_type: Union[MediaType, str],
-        media_id: Optional[str] = None,
-        media_type: Optional[MediaType] = None,
+        media_id_or_type: Optional[Union[MediaType, str]] = None,
+        media_id: Optional[Union[MediaType, str]] = None,
+        media_type: Optional[Union[MediaType, str]] = None,
     ) -> Optional[MediaItem]:
         """Fetch media metadata if supported.
         
-        Supports both (media_type, media_id) and (media_id, media_type=...) calling conventions.
+        Supports (media_type, media_id), (media_id, media_type), and (media_id) calling conventions.
         """
+        m_id: str = ""
+        m_type: Optional[MediaType] = None
+
+        if isinstance(media_type, MediaType):
+            m_type = media_type
+        elif isinstance(media_type, str):
+            try:
+                m_type = MediaType(media_type.lower())
+            except ValueError:
+                pass
+
         if isinstance(media_id_or_type, MediaType):
             m_type = media_id_or_type
-            m_id = media_id or ""
-        else:
-            m_id = str(media_id_or_type)
-            m_type = media_type
+            if isinstance(media_id, str):
+                m_id = media_id
+        elif isinstance(media_id_or_type, str):
+            val = media_id_or_type.strip()
+            if val.lower() in ("movie", "series", "anime", "channel", "tv"):
+                try:
+                    m_type = MediaType(val.lower())
+                except ValueError:
+                    m_type = MediaType.SERIES
+                if isinstance(media_id, str):
+                    m_id = media_id
+            else:
+                m_id = val
+                if isinstance(media_id, MediaType):
+                    m_type = media_id
+                elif isinstance(media_id, str) and media_id.lower() in ("movie", "series", "anime", "channel", "tv"):
+                    try:
+                        m_type = MediaType(media_id.lower())
+                    except ValueError:
+                        m_type = MediaType.SERIES
+
+        if not m_id and isinstance(media_id, str):
+            m_id = media_id
+
+        if not m_id:
+            return None
 
         if m_type is None:
             for candidate in (MediaType.MOVIE, MediaType.SERIES, MediaType.ANIME):
@@ -178,16 +211,25 @@ class GenericStremioProvider(BaseProvider):
 
     def get_streams(
         self,
-        media_type: MediaType,
+        media_type: Union[MediaType, str],
         media_id: str,
         season: Optional[int] = None,
         episode: Optional[int] = None,
     ) -> List[StreamSource]:
         """Fetch stream items from the addon's stream endpoint."""
-        type_str = media_type.value
+        if isinstance(media_type, MediaType):
+            m_type = media_type
+            type_str = media_type.value
+        else:
+            type_str = str(media_type).lower()
+            try:
+                m_type = MediaType(type_str)
+            except ValueError:
+                m_type = MediaType.SERIES
+
         if ":" in media_id:
             target_id = media_id
-        elif media_type == MediaType.SERIES and season is not None and episode is not None:
+        elif m_type == MediaType.SERIES and season is not None and episode is not None:
             target_id = f"{media_id}:{season}:{episode}"
         else:
             target_id = media_id

@@ -155,23 +155,56 @@ class CinemetaProvider(BaseProvider):
     def get_metadata(
         self,
         media_id_or_type: Optional[Union[MediaType, str]] = None,
-        media_id: Optional[str] = None,
-        media_type: Optional[MediaType] = None,
+        media_id: Optional[Union[MediaType, str]] = None,
+        media_type: Optional[Union[MediaType, str]] = None,
     ) -> Optional[MediaItem]:
         """Retrieve full media metadata including cast, crew, and episode list.
         
-        Supports both (media_type, media_id) and (media_id, media_type=...) calling conventions.
+        Supports (media_type, media_id), (media_id, media_type), and (media_id) calling conventions.
         If media_type is None, tries MediaType.MOVIE then MediaType.SERIES.
         """
+        m_id: str = ""
+        m_type: Optional[MediaType] = None
+
+        # Check explicit media_type keyword argument
+        if isinstance(media_type, MediaType):
+            m_type = media_type
+        elif isinstance(media_type, str):
+            try:
+                m_type = MediaType(media_type.lower())
+            except ValueError:
+                pass
+
+        # Check first argument
         if isinstance(media_id_or_type, MediaType):
             m_type = media_id_or_type
-            m_id = media_id or ""
+            if isinstance(media_id, str):
+                m_id = media_id
         elif isinstance(media_id_or_type, str):
-            m_id = str(media_id_or_type)
-            m_type = media_type
-        else:
-            m_id = media_id or ""
-            m_type = media_type
+            val = media_id_or_type.strip()
+            if val.lower() in ("movie", "series", "anime", "channel", "tv"):
+                try:
+                    m_type = MediaType(val.lower())
+                except ValueError:
+                    m_type = MediaType.SERIES
+                if isinstance(media_id, str):
+                    m_id = media_id
+            else:
+                m_id = val
+                # Check if second positional argument was passed as media type
+                if isinstance(media_id, MediaType):
+                    m_type = media_id
+                elif isinstance(media_id, str) and media_id.lower() in ("movie", "series", "anime", "channel", "tv"):
+                    try:
+                        m_type = MediaType(media_id.lower())
+                    except ValueError:
+                        m_type = MediaType.SERIES
+
+        if not m_id and isinstance(media_id, str):
+            m_id = media_id
+
+        if not m_id:
+            return None
 
         if m_type is None:
             # Probe MOVIE then SERIES to find correct metadata

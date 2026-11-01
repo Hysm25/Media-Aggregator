@@ -310,3 +310,36 @@ def test_live_cinemeta_and_torrentio_integration():
     streams = torrentio.get_streams(media_type=MediaType.MOVIE, media_id="tt1375666")
     assert len(streams) > 0
     assert any(s.info_hash for s in streams)
+
+
+def test_live_series_seasons_episodes_and_streams_integration():
+    """Live verification of TV series metadata, season/episode breakdown, and episode streams."""
+    try:
+        r = requests.get("https://v3-cinemeta.strem.io/manifest.json", timeout=3)
+        if r.status_code != 200:
+            pytest.skip("Cinemeta endpoint unreachable")
+    except Exception:
+        pytest.skip("No external network access available")
+
+    # Live Series Search
+    cinemeta = CinemetaProvider()
+    results = cinemeta.search("Breaking Bad", media_type=MediaType.SERIES)
+    assert len(results) > 0
+    bb = next((m for m in results if m.id == "tt0903747"), None)
+    assert bb is not None
+
+    # Live Series Metadata with episodes
+    meta = cinemeta.get_metadata("series", "tt0903747")
+    assert meta is not None
+    assert len(meta.episodes) >= 60
+
+    # Live Episode Stream Discovery
+    torrentio = TorrentioProvider()
+    streams = torrentio.get_streams(media_type=MediaType.SERIES, media_id="tt0903747", season=1, episode=1)
+    assert len(streams) > 0
+    top_stream = streams[0]
+    assert top_stream.info_hash is not None
+    assert top_stream.resolution is not None
+    magnet_uri = top_stream.build_magnet_uri()
+    assert magnet_uri is not None
+    assert "xt=urn" in magnet_uri

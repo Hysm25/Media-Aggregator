@@ -19,10 +19,8 @@ MEDIA_TYPE_HINTS = {
     "film": MediaType.MOVIE,
     "films": MediaType.MOVIE,
     "series": MediaType.SERIES,
-    "show": MediaType.SERIES,
-    "shows": MediaType.SERIES,
-    "tv": MediaType.SERIES,
     "tvshow": MediaType.SERIES,
+    "tvseries": MediaType.SERIES,
     "anime": MediaType.ANIME,
 }
 
@@ -47,8 +45,8 @@ def normalize_title(title: str) -> str:
     text = unicodedata.normalize("NFKD", title)
     text = "".join(c for c in text if not unicodedata.combining(c))
     text = text.lower()
-    # Replace non-alphanumeric with spaces
-    text = re.sub(r"[^\w\s]", " ", text)
+    # Replace non-alphanumeric and underscore with spaces
+    text = re.sub(r"[^\w\s]|_", " ", text)
     # Collapse multiple spaces
     return " ".join(text.split())
 
@@ -135,37 +133,41 @@ def score_search_result(item: MediaItem, parsed_query: ParsedQuery) -> float:
     q_tokens = parsed_query.tokens
 
     # -------------------------------------------------------------
-    # Tier 1: Exact Matches
+    # Tier 1: Exact Matches (Base: 9,200.0 - 10,000.0)
     # -------------------------------------------------------------
     if parsed_query.clean.lower() == raw_item_title.lower():
-        score = 1000.0
+        score = 10000.0
     elif norm_q == norm_item_title:
-        score = 980.0
+        score = 9800.0
     elif norm_q_no_art and norm_q_no_art == norm_item_no_articles:
-        score = 950.0
+        score = 9500.0
+    elif item.original_title and norm_q in (normalize_title(item.original_title), strip_articles(normalize_title(item.original_title))):
+        score = 9300.0
+    elif any(norm_q in (normalize_title(a), strip_articles(normalize_title(a))) for a in (item.aliases or [])):
+        score = 9200.0
 
     # -------------------------------------------------------------
-    # Tier 2: Prefix, Suffix, Substring, and Token Alignment Matches
+    # Tier 2: Prefix, Suffix, Substring, and Token Alignment Matches (Base: 3,500.0 - 5,000.0)
     # -------------------------------------------------------------
     if score == 0.0 and norm_q:
         # Prefix match (e.g. query "Breaking Bad" matching "Breaking Bad: Minisodes")
         if norm_item_title.startswith(norm_q):
             extra_words = max(0, len(item_tokens) - len(q_tokens))
-            score = max(780.0, 860.0 - (extra_words * 12.0))
+            score = max(4200.0, 5000.0 - (extra_words * 40.0))
         # Prefix match without leading articles (e.g. "The It Show" vs "It Show: Special")
         elif norm_q_no_art and norm_item_no_articles.startswith(norm_q_no_art):
             extra_words = max(0, len(norm_item_no_articles.split()) - len(norm_q_no_art.split()))
-            score = max(750.0, 830.0 - (extra_words * 12.0))
+            score = max(4000.0, 4800.0 - (extra_words * 40.0))
         # Query starts with item title (e.g. query "The It Show", item title "The It")
         elif norm_q.startswith(norm_item_title):
-            score = 760.0
+            score = 4400.0
         # Substring match with word boundaries
         elif re.search(r"\b" + re.escape(norm_q) + r"\b", norm_item_title):
             extra_words = max(0, len(item_tokens) - len(q_tokens))
-            score = max(680.0, 740.0 - (extra_words * 8.0))
+            score = max(3600.0, 4200.0 - (extra_words * 30.0))
 
     # -------------------------------------------------------------
-    # Tier 3: Token / Word Set Overlap Matches
+    # Tier 3: Token / Word Set Overlap Matches (Base: 1,000.0 - 2,800.0)
     # -------------------------------------------------------------
     if score == 0.0 and q_tokens:
         q_token_set = set(q_tokens)
@@ -179,15 +181,15 @@ def score_search_result(item: MediaItem, parsed_query: ParsedQuery) -> float:
                 # Check if words appear in exact same relative order
                 q_pattern = r".*?".join(re.escape(t) for t in q_tokens)
                 if re.search(r"\b" + q_pattern + r"\b", norm_item_title):
-                    score = 700.0 - (max(0, len(item_tokens) - len(q_tokens)) * 10.0)
+                    score = 2800.0 - (max(0, len(item_tokens) - len(q_tokens)) * 30.0)
                 else:
-                    score = 650.0 - (max(0, len(item_tokens) - len(q_tokens)) * 10.0)
+                    score = 2500.0 - (max(0, len(item_tokens) - len(q_tokens)) * 30.0)
             else:
                 # Partial token overlap
-                score = 350.0 + (overlap_ratio * 250.0) - (max(0, len(item_tokens) - len(matched_tokens)) * 5.0)
+                score = 1000.0 + (overlap_ratio * 1000.0) - (max(0, len(item_tokens) - len(matched_tokens)) * 15.0)
 
     # -------------------------------------------------------------
-    # Tier 4: Fuzzy Sequence Matching (Typo Tolerance)
+    # Tier 4: Fuzzy Sequence Matching (Typo Tolerance) (Base: 500.0 - 1,800.0)
     # -------------------------------------------------------------
     # Run sequence matcher if score is below exact match tier
     if norm_q and norm_item_title:
@@ -199,14 +201,14 @@ def score_search_result(item: MediaItem, parsed_query: ParsedQuery) -> float:
             best_sim = full_sim
 
         if best_sim >= 0.85:
-            fuzzy_score = 550.0 * best_sim
+            fuzzy_score = 1800.0 * best_sim
             score = max(score, fuzzy_score)
-        elif best_sim >= 0.70 and score < 450.0:
-            fuzzy_score = 400.0 * best_sim
+        elif best_sim >= 0.70 and score < 1200.0:
+            fuzzy_score = 1200.0 * best_sim
             score = max(score, fuzzy_score)
 
     # If still 0, check token-level fuzzy match for typos (e.g. "breking" -> "breaking")
-    if score < 400.0 and q_tokens and item_tokens:
+    if score < 1200.0 and q_tokens and item_tokens:
         token_matches = 0
         for qt in q_tokens:
             if any(difflib.SequenceMatcher(None, qt, it).ratio() >= 0.82 for it in item_tokens):
@@ -214,7 +216,7 @@ def score_search_result(item: MediaItem, parsed_query: ParsedQuery) -> float:
         if token_matches > 0:
             token_ratio = token_matches / len(q_tokens)
             if token_ratio >= 0.8:
-                score = max(score, 480.0 * token_ratio)
+                score = max(score, 1400.0 * token_ratio)
 
     # -------------------------------------------------------------
     # Adjustments: Year, Media Type, and Quality Signals
@@ -376,6 +378,16 @@ def _merge_media_item(target: MediaItem, source: MediaItem) -> None:
     if not target.runtime and source.runtime:
         target.runtime = source.runtime
 
+    if not target.original_title and source.original_title:
+        target.original_title = source.original_title
+
+    if source.aliases:
+        existing_aliases = set(target.aliases)
+        for a in source.aliases:
+            if a not in existing_aliases:
+                target.aliases.append(a)
+                existing_aliases.add(a)
+
     # Combine episodes
     if source.episodes:
         existing_ep_ids = {ep.id for ep in target.episodes}
@@ -391,10 +403,13 @@ def rank_search_results(
     media_type: Optional[MediaType] = None,
 ) -> List[MediaItem]:
     """Score and rank media items globally by relevance, typo tolerance, and quality signals."""
-    if not items:
+    if not items or not query:
         return []
 
     parsed_query = parse_search_query(query)
+    if not parsed_query.normalized:
+        return []
+
     # If caller explicitly provided media_type override, apply it
     if media_type and not parsed_query.target_type:
         parsed_query.target_type = media_type
@@ -419,5 +434,22 @@ def rank_search_results(
     # 2. IMDb rating
     # 3. Alphabetical title (ascending) as stable tie-breaker
     scored_items.sort(key=lambda x: (-x[0], -x[1], x[2]))
+
+    # Provider diversity on first page (top 5 items):
+    # If one ID prefix / provider origin dominates 4+ slots on page 1,
+    # but there is another provider's item within the same tier (score >= top_score * 0.75),
+    # ensure diversity is promoted to page 1.
+    if len(scored_items) > 3:
+        page_items = scored_items[:5]
+        prefixes = [item[3].id.split(":")[0] if ":" in item[3].id else ("tt" if item[3].id.startswith("tt") else "other") for item in page_items]
+        if len(set(prefixes)) == 1 and len(scored_items) > 5:
+            dom_prefix = prefixes[0]
+            for idx in range(5, len(scored_items)):
+                cand = scored_items[idx]
+                cand_prefix = cand[3].id.split(":")[0] if ":" in cand[3].id else ("tt" if cand[3].id.startswith("tt") else "other")
+                if cand_prefix != dom_prefix and cand[0] >= (scored_items[4][0] * 0.75):
+                    promoted = scored_items.pop(idx)
+                    scored_items.insert(4, promoted)
+                    break
 
     return [x[3] for x in scored_items]

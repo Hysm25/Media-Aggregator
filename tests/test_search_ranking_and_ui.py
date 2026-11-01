@@ -158,7 +158,7 @@ def test_ranking_media_type_keywords():
     """Verify query hints like 'movie' or 'series' prioritize matching media types."""
     pool = [
         MediaItem(id="av1", title="Avatar", type=MediaType.MOVIE, year="2009", imdb_rating="7.9"),
-        MediaItem(id="av2", title="Avatar: The Last Airbender", type=MediaType.SERIES, year="2005", imdb_rating="9.3"),
+        MediaItem(id="av2", title="Avatar", type=MediaType.SERIES, year="2024", imdb_rating="8.0"),
     ]
 
     ranked_movie = rank_search_results(pool, query="Avatar movie")
@@ -467,3 +467,148 @@ async def test_search_to_details_seasons_episodes_streams_flow(tmp_path):
         )
         assert cb_stream_detail.message.edit_text.called
         assert "Stream Source Information" in cb_stream_detail.message.edit_text.call_args[0][0]
+
+
+# ============================================================================
+# 4. Strict Exact Match Immunity, Aliases, Diversity & Resilience Tests
+# ============================================================================
+
+def test_ranking_exact_match_cannot_be_outranked_by_partial_matches():
+    """Verify mathematically that an exact title match CANNOT be outranked by partial matches.
+    
+    Even if the partial match has:
+      - Perfect matching year (+150 pts)
+      - Perfect matching media type (+100 pts)
+      - Perfect 10.0 IMDb rating (+40 pts)
+      - Poster (+15 pts)
+      - Synopsis (+10 pts)
+      - 50 Episodes (+15 pts)
+    And the exact match has:
+      - 1.0 IMDb rating (+4 pts)
+      - No poster, no synopsis, no episodes
+      - Mismatching year (-100 pts)
+    The exact match must still win by thousands of points.
+    """
+    exact_item_worst_case = MediaItem(
+        id="tt_exact",
+        title="Dune",
+        type=MediaType.MOVIE,
+        year="1984",
+        imdb_rating="1.0",
+        poster=None,
+        synopsis=None,
+    )
+    partial_item_best_case = MediaItem(
+        id="tt_partial",
+        title="Dune: Part Two and Beyond The Universe",
+        type=MediaType.MOVIE,
+        year="2024",
+        imdb_rating="10.0",
+        poster="https://img.metahub.space/dune2.jpg",
+        synopsis="A comprehensive detailed synopsis of the galactic desert world.",
+        episodes=[EpisodeItem(id=f"ep{i}", season=1, episode=i) for i in range(50)],
+    )
+
+    query = "Dune 2024 movie"
+    ranked = rank_search_results([partial_item_best_case, exact_item_worst_case], query=query)
+
+    assert ranked[0].id == "tt_exact"
+    assert ranked[0].title == "Dune"
+    assert ranked[1].id == "tt_partial"
+
+
+def test_ranking_original_localized_and_alternate_titles():
+    """Verify searching by original, localized, or alternate titles resolves the target item."""
+    item = MediaItem(
+        id="tt0245429",
+        title="Spirited Away",
+        original_title="Sen to Chihiro no Kamikakushi",
+        aliases=["Sen and Chihiro", "Le Voyage de Chihiro"],
+        type=MediaType.MOVIE,
+        year="2001",
+        imdb_rating="8.6",
+    )
+    other = MediaItem(id="tt99", title="Some Random Movie", type=MediaType.MOVIE, year="2020")
+
+    # Search by original Japanese Romanized title
+    ranked_orig = rank_search_results([other, item], query="Sen to Chihiro no Kamikakushi")
+    assert ranked_orig[0].id == "tt0245429"
+    assert ranked_orig[0].title == "Spirited Away"
+
+    # Search by English alias
+    ranked_alias = rank_search_results([other, item], query="Sen and Chihiro")
+    assert ranked_alias[0].id == "tt0245429"
+
+    # Search by French localized title
+    ranked_fr = rank_search_results([other, item], query="Le Voyage de Chihiro")
+    assert ranked_fr[0].id == "tt0245429"
+
+
+def test_search_special_characters_and_empty_queries():
+    """Verify empty queries and punctuation-only queries return cleanly without exceptions."""
+    pool = [MediaItem(id="tt1", title="Batman", type=MediaType.MOVIE)]
+
+    assert rank_search_results(pool, query="") == []
+    assert rank_search_results(pool, query="   ") == []
+    assert rank_search_results(pool, query="!@#$%^&*()_+{}[]:;\"'<>?,./") == []
+    assert rank_search_results([], query="Batman") == []
+
+
+def test_provider_diversity_on_page_one():
+    """Verify that provider diversity ensures high-quality results from different providers reach page 1."""
+    # 8 items from Cinemeta / IMDb prefix 'tt'
+    tt_items = [
+        MediaItem(id=f"tt00{i}", title=f"Naruto Shippuden Film {i}", type=MediaType.MOVIE, year=str(2005 + i), imdb_rating="7.0")
+        for i in range(8)
+    ]
+    # 1 item from Kitsu anime prefix 'kitsu:11'
+    kitsu_item = MediaItem(id="kitsu:11", title="Naruto Shippuden", type=MediaType.ANIME, year="2007", imdb_rating="8.7")
+
+    pool = tt_items + [kitsu_item]
+    ranked = rank_search_results(pool, query="Naruto Shippuden")
+
+    # The top 5 items (page 1) must contain the exact kitsu anime series match
+    page_1_ids = [item.id for item in ranked[:5]]
+    assert "kitsu:11" in page_1_ids
+
+
+@pytest.mark.asyncio
+async def test_provider_timeouts_failures_and_rate_limits(tmp_path):
+    """Verify graceful handling when primary discovery provider times out or triggers 429 rate limit."""
+    storage = StorageManager(db_path=tmp_path / "test_timeouts.db")
+    cinemeta_mock = MagicMock()
+    cinemeta_mock.search.side_effect = TimeoutError("Cinemeta gateway connection timed out")
+
+    media_service = MediaService(storage=storage, cinemeta=cinemeta_mock)
+
+    # Should not crash, should return empty list or fallback results
+    results = await media_service.search("Interstellar")
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_stable_pagination_when_provider_fails_on_later_page(tmp_path):
+    """Verify that cached search results guarantee stable pagination even if providers fail afterwards."""
+    storage = StorageManager(db_path=tmp_path / "test_stable_pages.db")
+    cinemeta_mock = MagicMock()
+
+    mock_items = [
+        MediaItem(id=f"tt_page_{i}", title=f"Star Wars Episode {i}", year=str(1977 + i))
+        for i in range(12)
+    ]
+    cinemeta_mock.search.return_value = mock_items
+
+    media_service = MediaService(storage=storage, cinemeta=cinemeta_mock)
+
+    # First call (populates cache)
+    results_page_0 = await media_service.search("Star Wars")
+    assert len(results_page_0) == 12
+
+    # Provider now goes offline
+    cinemeta_mock.search.side_effect = ConnectionRefusedError("Provider servers offline")
+
+    # Second call (e.g. user browsing to page 1)
+    results_page_1 = await media_service.search("Star Wars")
+    assert len(results_page_1) == 12
+    assert [x.id for x in results_page_1] == [x.id for x in results_page_0]
+

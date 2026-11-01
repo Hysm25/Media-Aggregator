@@ -104,7 +104,16 @@ class TorrentioProvider(BaseProvider):
         episode: Optional[int] = None,
     ) -> List[StreamSource]:
         """Fetch torrent and streaming sources from Torrentio."""
-        type_str = media_type.value
+        # Handle both MediaType enum and string
+        if isinstance(media_type, MediaType):
+            m_type = media_type
+            type_str = media_type.value
+        else:
+            type_str = str(media_type).lower()
+            try:
+                m_type = MediaType(type_str)
+            except ValueError:
+                m_type = MediaType.SERIES
 
         # Determine target_id
         if ":" in media_id:
@@ -112,7 +121,7 @@ class TorrentioProvider(BaseProvider):
         elif media_id.startswith("kitsu:") and episode is not None:
             # Anime Kitsu IDs in Torrentio use kitsu:{id}:{episode}
             target_id = f"{media_id}:{episode}"
-        elif media_type == MediaType.SERIES and season is not None and episode is not None:
+        elif m_type == MediaType.SERIES and season is not None and episode is not None:
             # For TV series, Stremio standard format is {imdb_id}:{season}:{episode}
             target_id = f"{media_id}:{season}:{episode}"
         else:

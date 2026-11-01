@@ -54,17 +54,21 @@ class MediaService:
             except Exception as e:
                 logger.warning(f"Cinemeta search failed for '{clean_q}': {e}")
 
-            # 2. Query active catalog providers for anime when anime is requested
-            if media_type == MediaType.ANIME:
-                for provider in self.registry.get_active_providers():
-                    if isinstance(provider, CinemetaProvider):
-                        continue
-                    if "kitsu" in provider.name.lower() or "anime" in provider.name.lower():
-                        try:
-                            anime_items = provider.search(query=clean_q, media_type=MediaType.ANIME)
-                            candidates.extend(anime_items)
-                        except Exception as e:
-                            logger.debug(f"Anime provider '{provider.name}' search failed for '{clean_q}': {e}")
+            # 2. Query other active catalog providers respecting media type
+            for provider in self.registry.get_catalog_providers(media_type=media_type):
+                if isinstance(provider, CinemetaProvider):
+                    continue
+                is_anime_p = "kitsu" in provider.name.lower() or "anime" in provider.name.lower()
+                if media_type == MediaType.ANIME and is_anime_p:
+                    try:
+                        candidates.extend(provider.search(query=clean_q, media_type=MediaType.ANIME))
+                    except Exception as e:
+                        logger.debug(f"Catalog provider '{provider.name}' search failed: {e}")
+                elif media_type != MediaType.ANIME and not is_anime_p:
+                    try:
+                        candidates.extend(provider.search(query=clean_q, media_type=media_type))
+                    except Exception as e:
+                        logger.debug(f"Catalog provider '{provider.name}' search failed: {e}")
 
             # 3. Apply global relevance ranking, deduplication, and typo tolerance
             ranked = rank_search_results(candidates, query=clean_q, media_type=media_type)

@@ -81,6 +81,8 @@ class MediaItem(BaseModel):
     director: Optional[str] = None
     imdb_rating: Optional[str] = None
     runtime: Optional[str] = None
+    original_title: Optional[str] = None
+    aliases: List[str] = Field(default_factory=list)
     episodes: List[EpisodeItem] = Field(default_factory=list)
 
     @property
